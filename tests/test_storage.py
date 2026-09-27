@@ -2,6 +2,7 @@ from pathlib import Path
 
 from tetris.highscores import Entry, HighScores
 from tetris_ui import storage
+from tetris_ui.settings import Settings
 
 
 def test_save_and_load(tmp_path):
@@ -58,3 +59,37 @@ def test_save_failure_is_reported_not_raised(tmp_path, capsys):
     blocker.write_text("x", encoding="utf-8")
     assert not storage.save(HighScores(), blocker / "highscores.json")
     assert "could not save" in capsys.readouterr().err
+
+
+# --- Sound settings --------------------------------------------------------
+
+
+def test_save_and_load_settings(tmp_path):
+    path = tmp_path / "settings.json"
+    settings = Settings(music_on=False, sound_on=True, music_volume=70)
+    assert storage.save_settings(settings, path)
+    assert storage.load_settings(path) == settings
+    assert list(tmp_path.iterdir()) == [path]  # no temporary files left behind
+
+
+def test_missing_settings_give_defaults(tmp_path):
+    assert storage.load_settings(tmp_path / "settings.json") == Settings()
+
+
+def test_corrupted_settings_give_defaults(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text("not json", encoding="utf-8")
+    assert storage.load_settings(path) == Settings()
+
+
+def test_settings_live_next_to_high_scores(monkeypatch, tmp_path):
+    monkeypatch.setenv("TETRIS_DATA_DIR", str(tmp_path))
+    assert storage.settings_path() == tmp_path / "settings.json"
+    assert storage.settings_path().parent == storage.high_scores_path().parent
+
+
+def test_settings_save_failure_is_reported_not_raised(tmp_path, capsys):
+    blocker = tmp_path / "file"
+    blocker.write_text("x", encoding="utf-8")
+    assert not storage.save_settings(Settings(), blocker / "settings.json")
+    assert "could not save settings" in capsys.readouterr().err

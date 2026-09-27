@@ -16,6 +16,13 @@ Cell = tuple[int, int]
 
 
 class Board:
+    """The 10 x 22 playfield of locked cells.
+
+    Each cell is empty (None) or holds the type of the piece locked there. Cells are
+    addressed as (col, row) with row growing downward; rows 0-1 are the hidden spawn
+    buffer above the 20 visible rows.
+    """
+
     def __init__(self) -> None:
         self._grid: list[list[PieceType | None]] = [
             [None] * WIDTH for _ in range(HEIGHT)
@@ -23,6 +30,7 @@ class Board:
 
     @staticmethod
     def in_bounds(col: int, row: int) -> bool:
+        """Whether (col, row) lies inside the grid, hidden rows included."""
         return 0 <= col < WIDTH and 0 <= row < HEIGHT
 
     def get(self, col: int, row: int) -> PieceType | None:
@@ -34,6 +42,7 @@ class Board:
         return self.in_bounds(col, row) and self._grid[row][col] is None
 
     def place(self, cells: Iterable[Cell], piece_type: PieceType) -> None:
+        """Mark the given cells as occupied by piece_type; the caller checks they fit."""
         for col, row in cells:
             self._grid[row][col] = piece_type
 

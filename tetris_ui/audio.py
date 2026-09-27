@@ -8,7 +8,6 @@ from tetris_ui import music, synth
 from tetris_ui.input import Controller, Sound
 
 MUSIC_CHANNEL = 0
-MUSIC_VOLUME = 0.5
 MIXER_BUFFER = 512
 
 
@@ -18,10 +17,18 @@ class SilentAudio:
     enabled = False
 
     def sync(self, controller: Controller) -> None:
+        """Drop this frame's sound events."""
         controller.drain_sounds()
 
 
 class Audio:
+    """Plays the effects and the music on an open pygame mixer.
+
+    `effects` maps every Sound to its synthesized pygame Sound and `music_sound` is the
+    whole melody loop. The music gets a reserved channel of its own, so effects never
+    cut it off; its volume follows the controller's music volume.
+    """
+
     enabled = True
 
     def __init__(self, effects: dict[Sound, pygame.mixer.Sound], music_sound: pygame.mixer.Sound) -> None:
@@ -29,7 +36,7 @@ class Audio:
         self._music = music_sound
         pygame.mixer.set_reserved(1)  # effects never steal the music channel
         self._channel = pygame.mixer.Channel(MUSIC_CHANNEL)
-        self._channel.set_volume(MUSIC_VOLUME)
+        self._volume: float | None = None  # music channel volume last applied
         self._generation: int | None = None  # music generation now loaded on the channel
         self._paused = False
 
@@ -50,6 +57,7 @@ class Audio:
 
     @property
     def music_busy(self) -> bool:
+        """Whether music is playing right now (started and not paused)."""
         return self._generation is not None and not self._paused
 
     def sync(self, controller: Controller) -> None:
@@ -58,6 +66,10 @@ class Audio:
         if controller.sound_on:
             for sound in sounds:
                 self._effects[sound].play()
+        volume = controller.music_volume / 100
+        if volume != self._volume:  # applies at once, even to music already playing
+            self._channel.set_volume(volume)
+            self._volume = volume
         state, generation = controller.music_state, controller.music_generation
         if state == "stopped":
             if self._generation is not None:

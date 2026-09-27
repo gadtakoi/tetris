@@ -19,6 +19,8 @@ _MS_PER_SECOND = 1000
 
 
 class StepResult(Enum):
+    """Outcome of moving the active piece down one row."""
+
     MOVED = "moved"
     LOCKED = "locked"
     REJECTED = "rejected"
@@ -26,6 +28,13 @@ class StepResult(Enum):
 
 @dataclass(frozen=True)
 class ActivePiece:
+    """The falling piece: its type, orientation (0-3) and bounding box position.
+
+    col and row are the top-left corner of the piece's bounding box on the board; col
+    may be negative when the box overhangs the left wall. Instances are immutable, so a
+    move builds a candidate and keeps it only if it fits.
+    """
+
     type: PieceType
     rotation: int
     col: int  # column of the bounding box's left edge; may be negative
@@ -33,10 +42,12 @@ class ActivePiece:
 
     @classmethod
     def spawn(cls, piece_type: PieceType) -> ActivePiece:
+        """The piece of the given type in orientation 0 at its spawn position."""
         col, row = spawn_position(piece_type)
         return cls(piece_type, 0, col, row)
 
     def cells(self) -> tuple[Cell, ...]:
+        """The four board cells (col, row) the piece covers."""
         return tuple(
             (self.col + c, self.row + r)
             for r, c in shape_cells(self.type, self.rotation)
@@ -44,11 +55,19 @@ class ActivePiece:
 
 
 class Game:
+    """A game of Tetris: the board, the falling and next pieces, score and gravity.
+
+    Pass `seed` for a reproducible game or `rng` to script the piece sequence (tests).
+    The game never reads a clock: time only moves through tick(). Commands report
+    whether they did anything and are rejected once the game is over.
+    """
+
     def __init__(self, seed: int | None = None, rng: random.Random | None = None) -> None:
         self._randomizer = Randomizer(rng if rng is not None else random.Random(seed))
         self.new_game()
 
     def new_game(self) -> None:
+        """Start over: empty board, counters at zero, fresh active and next pieces."""
         self.board = Board()
         self.is_over = False
         self.score = 0
@@ -61,18 +80,27 @@ class Game:
         self.next_type = self._randomizer.next()
 
     def move_left(self) -> bool:
+        """Shift the active piece one column left; return whether it moved."""
         return self._try(replace(self.active, col=self.active.col - 1))
 
     def move_right(self) -> bool:
+        """Shift the active piece one column right; return whether it moved."""
         return self._try(replace(self.active, col=self.active.col + 1))
 
     def rotate_cw(self) -> bool:
+        """Rotate the active piece clockwise in place (no wall kicks); return whether it turned."""
         return self._rotate(1)
 
     def rotate_ccw(self) -> bool:
+        """Rotate the active piece counterclockwise in place (no wall kicks); return whether it turned."""
         return self._rotate(ROTATION_COUNT - 1)
 
     def step_down(self) -> StepResult:
+        """The player's soft drop: move the active piece one row down, or lock it.
+
+        A successful move restarts the gravity interval, so gravity does not add a second
+        step right after the player's one.
+        """
         result = self._advance()
         if result is StepResult.MOVED:
             self._gravity_time = 0  # a player's drop restarts the gravity interval
@@ -125,10 +153,12 @@ class Game:
         return piece
 
     def _rotate(self, delta: int) -> bool:
+        """Turn the active piece by `delta` quarter turns clockwise if the result fits."""
         rotation = (self.active.rotation + delta) % ROTATION_COUNT
         return self._try(replace(self.active, rotation=rotation))
 
     def _fits(self, piece: ActivePiece) -> bool:
+        """Whether every cell of the piece is inside the board and empty."""
         return all(self.board.is_free(col, row) for col, row in piece.cells())
 
     def _try(self, candidate: ActivePiece) -> bool:
@@ -139,6 +169,11 @@ class Game:
         return True
 
     def _lock(self) -> None:
+        """Lock the active piece and bring in the next one.
+
+        The order matters: write the cells, clear full rows, add points at the level before
+        this lock, update lines and level, then spawn the next piece (which may end the game).
+        """
         self.pieces_locked += 1
         self.board.place(self.active.cells(), self.active.type)
         cleared = self.board.clear_full_rows()
@@ -149,6 +184,11 @@ class Game:
         self._spawn(self.next_type)
 
     def _spawn(self, piece_type: PieceType) -> None:
+        """Bring piece_type in at its spawn position and draw a new next piece.
+
+        Restarts the gravity interval. If the spawn cells are occupied the game is over
+        (block out) and the active piece is left as it was.
+        """
         self._gravity_time = 0
         piece = ActivePiece.spawn(piece_type)
         if not self._fits(piece):

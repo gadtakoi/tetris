@@ -1,4 +1,4 @@
-"""Command line entry point, shared by `python -m tetris_ui` and tetris.exe."""
+"""Command line entry point, shared by `python -m tetris_ui` and "SEVA Tetris.exe"."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import sys
 
 
 def _frame_count(text: str) -> int:
+    """argparse type for --max-frames: an integer of at least 1."""
     try:
         value = int(text)
     except ValueError:
@@ -17,7 +18,8 @@ def _frame_count(text: str) -> int:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="tetris", description="Classic Tetris.")
+    """Parse the command line; invalid arguments exit with code 2."""
+    parser = argparse.ArgumentParser(prog="SEVA Tetris", description="SEVA Tetris: classic Tetris.")
     parser.add_argument(
         "--max-frames",
         type=_frame_count,

@@ -5,7 +5,17 @@ from tetris.game import Game, StepResult
 from tetris.pieces import PieceType
 from tetris.highscores import Entry, HighScores
 from tetris_ui.input import Controller, Key, KeyRepeater, Phase, Sound
-from tetris_ui.layout import HIGHLIGHT, TEXT, cell_rect, overlay_lines, overlay_texts, screen_texts
+from tetris_ui.settings import Settings
+from tetris_ui.layout import (
+    HIGHLIGHT,
+    TEXT,
+    cell_rect,
+    key_screen,
+    key_screen_texts,
+    overlay_lines,
+    overlay_texts,
+    screen_texts,
+)
 
 
 class FakeGame:
@@ -362,7 +372,8 @@ def test_texts_during_play():
     controller = Controller(Game(seed=1))
     controller.game.score, controller.game.lines, controller.game.level = 1200, 13, 1
     assert screen_texts(controller) == [
-        "NEXT", "SCORE", "1200", "LINES", "13", "LEVEL", "1", "MUSIC ON", "SOUND ON",
+        "NEXT", "SCORE", "1200", "LINES", "13", "LEVEL", "1",
+        "MUSIC ON", "VOLUME 50%", "SOUND ON",
     ]
 
 
@@ -376,7 +387,15 @@ def test_sound_indicators():
 def test_indicators_sit_below_the_counters():
     from tetris_ui.layout import panel_texts
     positions = dict(panel_texts(Controller(Game(seed=1))))
-    assert positions["MUSIC ON"][1] >= 460 and positions["SOUND ON"][1] >= 460
+    for text in ("MUSIC ON", "VOLUME 50%", "SOUND ON"):
+        assert positions[text][1] >= 460
+
+
+def test_volume_on_the_panel():
+    controller = Controller(Game(seed=1))
+    controller.key_down(Key.VOLUME_UP)
+    controller.key_down(Key.VOLUME_UP)
+    assert "VOLUME 70%" in screen_texts(controller)
 
 
 def test_texts_on_pause():
@@ -579,3 +598,284 @@ def test_toggles_work_on_the_table_screen():
     controller = Controller(finished_game())
     controller.key_down(Key.TOGGLE_SOUND)
     assert not controller.sound_on
+
+
+# --- Sound settings and volume keys ----------------------------------------
+
+
+def test_volume_up():
+    controller = Controller(FakeGame())
+    controller.key_down(Key.VOLUME_UP)
+    assert controller.music_volume == 60
+
+
+def test_volume_stops_at_100():
+    controller = Controller(FakeGame(), settings=Settings(music_volume=100))
+    controller.key_down(Key.VOLUME_UP)
+    assert controller.music_volume == 100
+
+
+def test_volume_stops_at_0():
+    controller = Controller(FakeGame(), settings=Settings(music_volume=0))
+    controller.key_down(Key.VOLUME_DOWN)
+    assert controller.music_volume == 0
+
+
+def test_volume_on_pause(controller, game):
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.VOLUME_DOWN)
+    assert controller.music_volume == 40
+    assert controller.paused
+    assert game.calls == []
+
+
+def test_minus_is_typed_during_name_entry():
+    controller = Controller(record_game())
+    controller.key_down(Key.VOLUME_DOWN)
+    controller.text_input("-")
+    assert controller.name == "-"
+    assert controller.music_volume == 50
+
+
+def test_volume_on_the_table_screen():
+    controller = Controller(finished_game())
+    controller.key_down(Key.VOLUME_UP)
+    assert controller.music_volume == 60
+
+
+def test_every_settings_change_is_reported():
+    reported = []
+    controller = Controller(FakeGame(), on_settings_change=reported.append)
+    controller.key_down(Key.TOGGLE_MUSIC)
+    controller.key_down(Key.TOGGLE_SOUND)
+    controller.key_down(Key.VOLUME_UP)
+    assert reported == [
+        Settings(music_on=False, sound_on=True, music_volume=50),
+        Settings(music_on=False, sound_on=False, music_volume=50),
+        Settings(music_on=False, sound_on=False, music_volume=60),
+    ]
+    assert controller.settings == reported[-1]
+
+
+def test_no_report_when_volume_is_at_its_limit():
+    reported = []
+    controller = Controller(
+        FakeGame(), settings=Settings(music_volume=100), on_settings_change=reported.append
+    )
+    controller.key_down(Key.VOLUME_UP)
+    assert reported == []
+
+
+def test_saved_music_off_means_no_music():
+    controller = Controller(FakeGame(), settings=Settings(music_on=False))
+    assert not controller.music_on
+    assert controller.music_state == "stopped"
+
+
+def test_volume_change_does_not_restart_music():
+    controller = Controller(FakeGame())
+    generation = controller.music_generation
+    controller.key_down(Key.VOLUME_UP)
+    assert controller.music_generation == generation
+
+
+# --- Splash screen ---------------------------------------------------------
+
+T_SPAWN = {(4, 2), (3, 3), (4, 3), (5, 3)}
+T_ONE_ROW_DOWN = {(4, 3), (3, 4), (4, 4), (5, 4)}
+
+
+def splash_controller(*pieces: PieceType) -> tuple[Game, Controller]:
+    game = Game(rng=ScriptedRng(pieces or (PieceType.T,)))
+    return game, Controller(game, splash=True)
+
+
+def test_no_time_passes_on_the_splash():
+    game, controller = splash_controller(PieceType.T, PieceType.T)
+    assert controller.phase is Phase.SPLASH
+    frames(controller, 5000)
+    assert set(game.active.cells()) == T_SPAWN
+
+
+def test_splash_sends_no_ticks():
+    game = FakeGame()
+    controller = Controller(game, splash=True)
+    frames(controller, 5000)
+    assert game.ticks == []
+
+
+def test_enter_starts_the_game():
+    game, controller = splash_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.RESTART)
+    assert controller.phase is Phase.PLAYING
+    frames(controller, 800)
+    assert set(game.active.cells()) == T_ONE_ROW_DOWN
+
+
+def test_keys_on_the_splash():
+    game = FakeGame()
+    controller = Controller(game, splash=True)
+    controller.key_down(Key.LEFT)
+    controller.key_down(Key.HARD_DROP)
+    controller.key_down(Key.HELP)
+    controller.key_down(Key.TOGGLE_MUSIC)
+    assert game.calls == []
+    assert controller.phase is Phase.SPLASH
+    assert not controller.help_open
+    assert not controller.music_on
+
+
+def test_volume_works_on_the_splash():
+    controller = Controller(FakeGame(), splash=True)
+    controller.key_down(Key.VOLUME_UP)
+    assert controller.music_volume == 60
+
+
+def test_no_music_on_the_splash():
+    _, controller = splash_controller()
+    assert controller.music_state == "stopped"
+    controller.key_down(Key.RESTART)
+    assert controller.music_state == "playing"
+
+
+def test_splash_is_not_shown_again():
+    game, controller = splash_controller(PieceType.O)
+    controller.key_down(Key.RESTART)
+    while controller.phase is Phase.PLAYING:
+        controller.key_down(Key.HARD_DROP)
+    assert controller.phase is Phase.TABLE
+    controller.key_down(Key.RESTART)
+    assert controller.phase is Phase.PLAYING
+
+
+# --- Help screen (F1) ------------------------------------------------------
+
+
+def test_f1_opens_the_help_screen(controller, game):
+    controller.key_down(Key.HELP)
+    assert controller.help_open
+    frames(controller, 5000)
+    controller.key_down(Key.LEFT)
+    assert game.ticks == []
+    assert game.calls == []
+    assert controller.music_state == "paused"
+
+
+@pytest.mark.parametrize("closing_key", [Key.HELP, Key.PAUSE, Key.RESTART])
+def test_help_screen_closes_and_the_game_goes_on(closing_key):
+    game, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.HELP)
+    controller.key_down(closing_key)
+    assert not controller.help_open
+    assert not controller.paused
+    frames(controller, 800)
+    assert set(game.active.cells()) == T_ONE_ROW_DOWN
+
+
+def test_f1_on_pause():
+    _, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.HELP)
+    assert controller.help_open
+    controller.key_down(Key.RESTART)
+    assert not controller.help_open
+    assert not controller.paused
+    assert controller.phase is Phase.PLAYING
+
+
+def test_f1_is_ignored_after_game_over():
+    controller = Controller(finished_game())
+    controller.key_down(Key.HELP)
+    assert controller.phase is Phase.TABLE
+    assert not controller.help_open
+
+
+def test_f1_is_ignored_during_name_entry():
+    controller = Controller(record_game())
+    controller.key_down(Key.HELP)
+    assert controller.phase is Phase.NAME_ENTRY
+    assert not controller.help_open
+
+
+def test_held_key_does_not_repeat_after_help(controller, game):
+    controller.key_down(Key.LEFT)
+    controller.key_down(Key.HELP)
+    frames(controller, 1000)
+    controller.key_down(Key.HELP)
+    frames(controller, 500)
+    assert game.calls == ["left"]
+
+
+def test_sound_keys_work_on_the_help_screen(controller):
+    controller.key_down(Key.HELP)
+    controller.key_down(Key.TOGGLE_MUSIC)
+    controller.key_down(Key.VOLUME_UP)
+    assert controller.help_open
+    assert not controller.music_on
+    assert controller.music_volume == 60
+
+
+def test_other_keys_are_ignored_on_the_help_screen(controller, game):
+    controller.key_down(Key.HELP)
+    for key in (Key.LEFT, Key.DOWN, Key.HARD_DROP, Key.ROTATE_CW, Key.BACKSPACE):
+        controller.key_down(key)
+    assert controller.help_open
+    assert game.calls == []
+
+
+# --- Key screen texts ------------------------------------------------------
+
+SPEC_HOTKEYS = [
+    ("Left / Right", "Move"),
+    ("Down", "Soft drop"),
+    ("Space", "Hard drop"),
+    ("Up / X", "Rotate right"),
+    ("Z / Ctrl", "Rotate left"),
+    ("P / Esc", "Pause"),
+    ("F1", "Help"),
+    ("M", "Music on/off"),
+    ("- / +", "Music volume"),
+    ("N", "Sound on/off"),
+    ("Enter", "Start / restart"),
+]
+
+
+def test_splash_texts():
+    _, controller = splash_controller()
+    assert key_screen(controller) == "splash"
+    texts = screen_texts(controller)
+    assert texts[0] == "SEVA Tetris"
+    assert texts[-1] == "Press Enter to start"
+    pairs = list(zip(texts[1:-1:2], texts[2:-1:2]))
+    assert pairs == SPEC_HOTKEYS
+    assert "SCORE" not in texts and "NEXT" not in texts
+    assert all(text.isascii() for text in texts)
+
+
+def test_key_table_layout():
+    _, controller = splash_controller()
+    entries = key_screen_texts(controller)
+    keys = [pos for _, pos, role in entries if role == "key"]
+    actions = [pos for _, pos, role in entries if role == "action"]
+    assert keys == [(70, 150 + 36 * row) for row in range(11)]
+    assert actions == [(270, 150 + 36 * row) for row in range(11)]
+
+
+def test_help_screen_texts():
+    _, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.HELP)
+    texts = screen_texts(controller)
+    assert key_screen(controller) == "help"
+    assert texts[0] == "SEVA Tetris"
+    assert texts[-1] == "Press F1 or Enter to return"
+    assert list(zip(texts[1:-1:2], texts[2:-1:2])) == SPEC_HOTKEYS
+
+
+def test_field_and_panel_return_after_help():
+    _, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.HELP)
+    controller.key_down(Key.HELP)
+    texts = screen_texts(controller)
+    assert key_screen(controller) is None
+    assert "SCORE" in texts and "NEXT" in texts
+    assert "SEVA Tetris" not in texts

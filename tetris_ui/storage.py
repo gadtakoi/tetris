@@ -1,4 +1,4 @@
-"""Loading and saving the high score table in the user's data folder."""
+"""Loading and saving the high score table and sound settings in the user's data folder."""
 
 from __future__ import annotations
 
@@ -8,9 +8,11 @@ from pathlib import Path
 
 from tetris.highscores import HighScores
 from tetris_ui.cli import warn
+from tetris_ui.settings import Settings
 
 APP_DIR_NAME = "tetris"
 HIGH_SCORES_FILE = "highscores.json"
+SETTINGS_FILE = "settings.json"
 
 
 def data_dir() -> Path:
@@ -25,7 +27,13 @@ def data_dir() -> Path:
 
 
 def high_scores_path() -> Path:
+    """Where the high score table is kept."""
     return data_dir() / HIGH_SCORES_FILE
+
+
+def settings_path() -> Path:
+    """Where the sound settings are kept, next to the high score table."""
+    return data_dir() / SETTINGS_FILE
 
 
 def load(path: Path) -> HighScores:
@@ -39,6 +47,29 @@ def load(path: Path) -> HighScores:
 
 def save(scores: HighScores, path: Path) -> bool:
     """Write the table atomically; report failure instead of raising."""
+    return _write_atomic(path, scores.to_json(), "high scores")
+
+
+def load_settings(path: Path) -> Settings:
+    """Read the sound settings; a missing or unreadable file gives the defaults."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return Settings()
+    return Settings.from_json(text)
+
+
+def save_settings(settings: Settings, path: Path) -> bool:
+    """Write the sound settings atomically; report failure instead of raising."""
+    return _write_atomic(path, settings.to_json(), "settings")
+
+
+def _write_atomic(path: Path, text: str, what: str) -> bool:
+    """Write text through a temporary file in the same folder, then swap it in.
+
+    An interrupted write never leaves a half-written file behind. Returns False
+    (after a warning) if the file could not be written.
+    """
     tmp_name = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -46,11 +77,11 @@ def save(scores: HighScores, path: Path) -> bool:
             "w", encoding="utf-8", dir=path.parent, suffix=".tmp", delete=False
         ) as tmp:
             tmp_name = tmp.name
-            tmp.write(scores.to_json())
+            tmp.write(text)
         os.replace(tmp_name, path)
         return True
     except OSError as error:
         if tmp_name is not None:
             Path(tmp_name).unlink(missing_ok=True)
-        warn(f"could not save high scores to {path}: {error}")
+        warn(f"could not save {what} to {path}: {error}")
         return False

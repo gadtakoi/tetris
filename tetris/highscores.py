@@ -15,6 +15,8 @@ _EXTRA_NAME_CHARS = " -_"
 
 @dataclass(frozen=True)
 class Entry:
+    """One result in the table: player name, score, cleared lines and level reached."""
+
     name: str
     score: int
     lines: int
@@ -22,6 +24,12 @@ class Entry:
 
 
 class HighScores:
+    """The best results, at most MAX_ENTRIES of them, highest score first.
+
+    A result that ties an existing score goes below it, so earlier results keep their
+    place. Entries given to the constructor are inserted in order and cut to the maximum.
+    """
+
     def __init__(self, entries: tuple[Entry, ...] = ()) -> None:
         self._entries: list[Entry] = []
         for entry in entries:
@@ -30,6 +38,7 @@ class HighScores:
 
     @property
     def entries(self) -> tuple[Entry, ...]:
+        """The entries, best first."""
         return tuple(self._entries)
 
     def qualifies(self, score: int) -> bool:
@@ -47,6 +56,7 @@ class HighScores:
         return place
 
     def to_json(self) -> str:
+        """The table as the JSON text stored in highscores.json."""
         return json.dumps(
             {
                 "version": FORMAT_VERSION,
@@ -76,7 +86,8 @@ class HighScores:
         return cls(tuple(entries))
 
     def _insert(self, entry: Entry) -> int:
-        # After every entry with an equal or higher score, so earlier results stay above.
+        """Insert after every entry with an equal or higher score, so earlier results
+        stay above; return the 1-based place."""
         index = 0
         while index < len(self._entries) and self._entries[index].score >= entry.score:
             index += 1
@@ -85,6 +96,7 @@ class HighScores:
 
 
 def _parse_entry(raw: object) -> Entry | None:
+    """An Entry from one raw JSON object, or None if any field is missing or invalid."""
     if not isinstance(raw, dict):
         return None
     name = raw.get("name")
@@ -97,6 +109,7 @@ def _parse_entry(raw: object) -> Entry | None:
 
 
 def is_name_char(ch: str) -> bool:
+    """Whether ch may appear in a player name: a letter of any alphabet, a digit, space, "-" or "_"."""
     return len(ch) == 1 and (ch.isalpha() or ch.isdigit() or ch in _EXTRA_NAME_CHARS)
 
 
@@ -111,4 +124,5 @@ def append_to_name(name: str, text: str) -> str:
 
 
 def final_name(name: str) -> str:
+    """The name to store: the typed name trimmed, or DEFAULT_NAME if nothing is left."""
     return name.strip() or DEFAULT_NAME

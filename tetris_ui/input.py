@@ -1,13 +1,15 @@
-"""Keyboard input rules without pygame: auto-repeat, pause, frame time, name entry,
-restart, sound toggles and the sound events of each frame."""
+"""Keyboard input rules without pygame: the splash and help screens, auto-repeat,
+pause, frame time, name entry, restart, sound settings and each frame's sound events."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from enum import Enum
 from typing import Protocol
 
 from tetris.highscores import Entry, HighScores, append_to_name, final_name
+from tetris_ui.settings import Settings
 
 SHIFT_DELAY_MS = 170
 SHIFT_INTERVAL_MS = 50
@@ -16,6 +18,8 @@ MAX_FRAME_MS = 100
 
 
 class Key(Enum):
+    """Game actions produced by the keyboard; app.KEY_MAP maps pygame keys to them."""
+
     LEFT = "left"
     RIGHT = "right"
     DOWN = "down"
@@ -27,6 +31,13 @@ class Key(Enum):
     BACKSPACE = "backspace"
     TOGGLE_MUSIC = "toggle_music"
     TOGGLE_SOUND = "toggle_sound"
+    VOLUME_DOWN = "volume_down"
+    VOLUME_UP = "volume_up"
+    HELP = "help"
+
+
+# Keys that change the sound settings; they work everywhere except name entry.
+SETTINGS_KEYS = (Key.TOGGLE_MUSIC, Key.TOGGLE_SOUND, Key.VOLUME_DOWN, Key.VOLUME_UP)
 
 
 class Sound(Enum):
@@ -42,26 +53,46 @@ class Sound(Enum):
 
 
 class Phase(Enum):
+    """What the screen is for: the start screen, a game in progress, or after game over."""
+
+    SPLASH = "splash"  # the start screen with the key list, Enter starts the game
     PLAYING = "playing"
     NAME_ENTRY = "name_entry"  # the result made the high score table
     TABLE = "table"  # showing the table, Enter starts a new game
 
 
 class GameLike(Protocol):
+    """The part of tetris.game.Game the controller uses; tests pass a recording fake."""
+
     is_over: bool
     score: int
     lines: int
     level: int
     pieces_locked: int
 
-    def move_left(self) -> object: ...
-    def move_right(self) -> object: ...
-    def rotate_cw(self) -> object: ...
-    def rotate_ccw(self) -> object: ...
-    def step_down(self) -> object: ...
-    def hard_drop(self) -> object: ...
-    def tick(self, dt_ms: int) -> None: ...
-    def new_game(self) -> None: ...
+    def move_left(self) -> object:
+        """Shift the active piece left; truthy if it moved."""
+
+    def move_right(self) -> object:
+        """Shift the active piece right; truthy if it moved."""
+
+    def rotate_cw(self) -> object:
+        """Rotate the active piece clockwise; truthy if it turned."""
+
+    def rotate_ccw(self) -> object:
+        """Rotate the active piece counterclockwise; truthy if it turned."""
+
+    def step_down(self) -> object:
+        """Soft drop by one row, locking the piece if it cannot move."""
+
+    def hard_drop(self) -> object:
+        """Drop the active piece to the bottom and lock it."""
+
+    def tick(self, dt_ms: int) -> None:
+        """Let dt_ms milliseconds of gravity pass."""
+
+    def new_game(self) -> None:
+        """Start a new game."""
 
 
 class KeyRepeater:
@@ -76,14 +107,17 @@ class KeyRepeater:
 
     @property
     def held(self) -> bool:
+        """Whether the key is being held down."""
         return self._held
 
     def press(self) -> None:
+        """Start timing the repeats from the moment the key went down."""
         self._held = True
         self._elapsed = 0
         self._next = self._delay
 
     def release(self) -> None:
+        """Stop repeating until the key is pressed again."""
         self._held = False
 
     def update(self, dt_ms: int) -> int:
@@ -99,23 +133,33 @@ class KeyRepeater:
 
 
 class Controller:
-    """Turns key presses and frame time into commands on the game."""
+    """Turns key presses and frame time into commands on the game.
+
+    `scores` is the high score table, and `on_save` is called with it after a new
+    record is entered. `settings` are the sound settings, and `on_settings_change` is
+    called with the new settings after every change. With `splash=True` the controller
+    starts on the splash screen instead of in a running game.
+    """
 
     def __init__(
         self,
         game: GameLike,
         scores: HighScores | None = None,
         on_save: Callable[[HighScores], object] | None = None,
+        settings: Settings | None = None,
+        on_settings_change: Callable[[Settings], object] | None = None,
+        splash: bool = False,
     ) -> None:
         self.game = game
         self.scores = scores if scores is not None else HighScores()
         self._on_save = on_save
+        self.settings = settings if settings is not None else Settings()
+        self._on_settings_change = on_settings_change
         self.paused = False
+        self.help_open = False  # the key list opened with F1; the game stays paused under it
         self.name = ""  # the name being typed in NAME_ENTRY
         self.highlight: int | None = None  # table place of this game's result
-        self._phase = Phase.PLAYING
-        self.music_on = True
-        self.sound_on = True
+        self._phase = Phase.SPLASH if splash else Phase.PLAYING
         # Grows whenever the music must start over (new game, music switched on).
         self.music_generation = 0
         self._sounds: dict[Sound, None] = {}  # this frame's sounds, ordered, no repeats
@@ -125,12 +169,29 @@ class Controller:
 
     @property
     def phase(self) -> Phase:
+        """The current phase; the switch away from PLAYING happens here once the game is over."""
         self._check_game_over()
         return self._phase
 
     @property
     def playing(self) -> bool:
+        """Whether the game is running: a game is in progress and it is not paused."""
         return self.phase is Phase.PLAYING and not self.paused
+
+    @property
+    def music_on(self) -> bool:
+        """Whether the music is switched on."""
+        return self.settings.music_on
+
+    @property
+    def sound_on(self) -> bool:
+        """Whether the sound effects are switched on."""
+        return self.settings.sound_on
+
+    @property
+    def music_volume(self) -> int:
+        """Music volume in percent, 0-100."""
+        return self.settings.music_volume
 
     @property
     def music_state(self) -> str:
@@ -146,9 +207,19 @@ class Controller:
         return sounds
 
     def key_down(self, key: Key) -> None:
+        """Handle a key press according to the current phase.
+
+        Sound settings keys work everywhere except during name entry. The splash waits for
+        Enter; the help screen closes on F1, Esc, P or Enter; during play the key moves,
+        rotates or drops the piece, pauses or opens the help screen.
+        """
         phase = self.phase
-        if key in (Key.TOGGLE_MUSIC, Key.TOGGLE_SOUND) and phase is not Phase.NAME_ENTRY:
-            self._toggle(key)
+        if key in SETTINGS_KEYS and phase is not Phase.NAME_ENTRY:
+            self._change_settings(key)
+            return
+        if phase is Phase.SPLASH:
+            if key is Key.RESTART:
+                self._phase = Phase.PLAYING
             return
         if phase is Phase.NAME_ENTRY:
             if key is Key.RESTART:
@@ -162,6 +233,17 @@ class Controller:
                 self.highlight = None
                 self._phase = Phase.PLAYING
                 self.music_generation += 1
+            return
+        if self.help_open:
+            if key in (Key.HELP, Key.PAUSE, Key.RESTART):
+                self.help_open = False
+                self.paused = False
+                self._release_all()
+            return
+        if key is Key.HELP:
+            self.help_open = True
+            self.paused = True
+            self._release_all()
             return
         if key is Key.PAUSE:
             self.paused = not self.paused
@@ -192,6 +274,7 @@ class Controller:
             self.name = append_to_name(self.name, text)
 
     def key_up(self, key: Key) -> None:
+        """Handle a key release: stop the auto-repeat of that key."""
         if key is self._shift_key:
             self._shift.release()
             self._shift_key = None
@@ -215,20 +298,33 @@ class Controller:
         self._check_game_over()
 
     def _shift_once(self) -> None:
+        """Shift the piece once toward the held direction, recording a move sound."""
         if self._shift_key is Key.LEFT:
             self._sound_if(self.game.move_left(), Sound.MOVE)
         elif self._shift_key is Key.RIGHT:
             self._sound_if(self.game.move_right(), Sound.MOVE)
 
-    def _toggle(self, key: Key) -> None:
+    def _change_settings(self, key: Key) -> None:
+        """Apply a sound settings key and report the new settings if they changed."""
+        old = self.settings
         if key is Key.TOGGLE_SOUND:
-            self.sound_on = not self.sound_on
+            new = replace(old, sound_on=not old.sound_on)
+        elif key is Key.TOGGLE_MUSIC:
+            new = replace(old, music_on=not old.music_on)
+        elif key is Key.VOLUME_UP:
+            new = old.with_volume_step(1)
+        else:
+            new = old.with_volume_step(-1)
+        if new == old:
             return
-        self.music_on = not self.music_on
-        if self.music_on:
+        self.settings = new
+        if new.music_on and not old.music_on:
             self.music_generation += 1  # switching music on starts it over
+        if self._on_settings_change is not None:
+            self._on_settings_change(new)
 
     def _snapshot(self) -> tuple[int, int, int, bool]:
+        """The game counters that sound events are derived from."""
         game = self.game
         return game.pieces_locked, game.lines, game.level, game.is_over
 
@@ -250,6 +346,7 @@ class Controller:
             self._sounds[Sound.GAME_OVER] = None
 
     def _sound_if(self, done: object, sound: Sound) -> None:
+        """Record `sound` for this frame if `done` is truthy."""
         if done:
             self._sounds[sound] = None
 
@@ -258,6 +355,7 @@ class Controller:
         if self._phase is not Phase.PLAYING or not self.game.is_over:
             return
         self.paused = False
+        self.help_open = False
         self._release_all()
         self.name = ""
         if self.scores.qualifies(self.game.score):
@@ -266,6 +364,7 @@ class Controller:
             self._phase = Phase.TABLE
 
     def _confirm_name(self) -> None:
+        """Save this game's result under the typed name and show the table."""
         game = self.game
         entry = Entry(final_name(self.name), game.score, game.lines, game.level)
         self.highlight = self.scores.add(entry)
@@ -274,6 +373,7 @@ class Controller:
         self._phase = Phase.TABLE
 
     def _release_all(self) -> None:
+        """Forget held keys, so nothing repeats until they are pressed again."""
         self._shift.release()
         self._shift_key = None
         self._drop.release()

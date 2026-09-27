@@ -20,6 +20,7 @@ _NOTE_RE = re.compile(r"^([A-G])([#b]?)(\d)$")
 
 
 def ms_to_samples(ms: float) -> int:
+    """Number of samples in `ms` milliseconds at SAMPLE_RATE."""
     return round(ms * SAMPLE_RATE / 1000)
 
 
@@ -35,6 +36,7 @@ def note_freq(note: str) -> float:
 
 
 def silence(length: int) -> Samples:
+    """`length` samples of silence."""
     return array("h", bytes(2 * length))
 
 
@@ -74,6 +76,7 @@ def tone(
 
 
 def concat(parts: Iterable[Samples]) -> Samples:
+    """Join sample arrays one after another."""
     out = array("h")
     for part in parts:
         out.extend(part)
@@ -128,35 +131,43 @@ def to_bytes(samples: Samples) -> bytes:
 
 
 def _notes(names: Sequence[str], ms_each: float, wave: str, volume: float) -> Samples:
+    """Named notes of `ms_each` milliseconds each, one after another."""
     length = ms_to_samples(ms_each)
     return concat(tone(note_freq(n), length, wave, volume) for n in names)
 
 
 def effect_move() -> Samples:
+    """A short high blip for a successful shift (30 ms)."""
     return tone(note_freq("A5"), ms_to_samples(30), "square", 0.2)
 
 
 def effect_rotate() -> Samples:
+    """A two-note chirp for a successful rotation (50 ms)."""
     return _notes(["E5", "B5"], 25, "square", 0.25)
 
 
 def effect_lock() -> Samples:
+    """A noise burst for a piece locking without clearing lines (80 ms)."""
     return tone(0, ms_to_samples(80), "noise", 0.4, seed=1)
 
 
 def effect_clear() -> Samples:
+    """A C major arpeggio for clearing one to three lines (240 ms)."""
     return _notes(["C5", "E5", "G5"], 80, "square", 0.35)
 
 
 def effect_tetris() -> Samples:
+    """A longer rising arpeggio for clearing four lines (500 ms)."""
     return _notes(["C5", "E5", "G5", "C6", "E6"], 100, "square", 0.4)
 
 
 def effect_level_up() -> Samples:
+    """A rising scale for reaching a new level (400 ms)."""
     return _notes(["C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6"], 50, "triangle", 0.5)
 
 
 def effect_game_over() -> Samples:
+    """A falling melody over a bass line when the game ends (1200 ms)."""
     lead = _notes(["E5", "D5", "C5", "B4", "A4", "E4"], 200, "square", 0.3)
     bass = _notes(["A3", "G3", "F3", "E3", "D3", "A2"], 200, "triangle", 0.4)
     return mix(lead, bass)

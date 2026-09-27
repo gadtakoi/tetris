@@ -7,7 +7,7 @@ from tetris.pieces import PieceType
 from tetris_ui.input import Controller, Phase
 
 WINDOW_SIZE = (520, 640)
-TITLE = "Tetris"
+TITLE = "SEVA Tetris"
 FPS = 60
 
 CELL = 30
@@ -21,7 +21,29 @@ PREVIEW_CELLS = 4
 # (label, y of the label); each value is drawn 30 px below its label.
 COUNTER_LABELS = (("SCORE", 220), ("LINES", 300), ("LEVEL", 380))
 VALUE_OFFSET_Y = 30
-MUSIC_Y, SOUND_Y = 470, 500
+MUSIC_Y, VOLUME_Y, SOUND_Y = 470, 500, 530
+
+# The key screen (splash and F1 help): hotkeys as (keys, action), all ASCII because
+# the built-in font has no arrow glyphs.
+HOTKEYS: tuple[tuple[str, str], ...] = (
+    ("Left / Right", "Move"),
+    ("Down", "Soft drop"),
+    ("Space", "Hard drop"),
+    ("Up / X", "Rotate right"),
+    ("Z / Ctrl", "Rotate left"),
+    ("P / Esc", "Pause"),
+    ("F1", "Help"),
+    ("M", "Music on/off"),
+    ("- / +", "Music volume"),
+    ("N", "Sound on/off"),
+    ("Enter", "Start / restart"),
+)
+SPLASH_HINT = "Press Enter to start"
+HELP_HINT = "Press F1 or Enter to return"
+KEY_SCREEN_TITLE_Y = 70  # center of the title
+KEY_TABLE_Y, KEY_TABLE_STEP = 150, 36  # top of the first row, row pitch
+KEY_COLUMN_X, ACTION_COLUMN_X = 70, 270  # left edges of the two columns
+KEY_SCREEN_HINT_Y = 590  # center of the hint
 
 Color = tuple[int, int, int]
 Rect = tuple[int, int, int, int]
@@ -43,12 +65,13 @@ TEXT: Color = (230, 230, 230)
 HIGHLIGHT: Color = (240, 240, 0)
 CELL_OUTLINE: Color = (20, 20, 20)
 OVERLAY_ALPHA = 160
+GHOST_DIVISOR = 8  # the ghost is the piece color at 1/8 brightness
 
 
 def ghost_color(piece_type: PieceType) -> Color:
-    """The piece color dimmed four times, used for the drop shadow."""
+    """The piece color dimmed GHOST_DIVISOR times, used for the drop shadow."""
     r, g, b = PIECE_COLORS[piece_type]
-    return r // 4, g // 4, b // 4
+    return r // GHOST_DIVISOR, g // GHOST_DIVISOR, b // GHOST_DIVISOR
 
 
 def cell_rect(col: int, row: int) -> Rect:
@@ -67,11 +90,13 @@ def panel_texts(controller: Controller) -> list[tuple[str, tuple[int, int]]]:
         texts.append((label, (PANEL_X, y)))
         texts.append((str(value), (PANEL_X, y + VALUE_OFFSET_Y)))
     texts.append((f"MUSIC {_on_off(controller.music_on)}", (PANEL_X, MUSIC_Y)))
+    texts.append((f"VOLUME {controller.music_volume}%", (PANEL_X, VOLUME_Y)))
     texts.append((f"SOUND {_on_off(controller.sound_on)}", (PANEL_X, SOUND_Y)))
     return texts
 
 
 def _on_off(flag: bool) -> str:
+    """Show a switch as "ON" or "OFF"."""
     return "ON" if flag else "OFF"
 
 
@@ -96,9 +121,42 @@ def overlay_lines(controller: Controller) -> list[tuple[str, Color]]:
 
 
 def overlay_texts(controller: Controller) -> list[str]:
+    """Just the texts of overlay_lines()."""
     return [text for text, _ in overlay_lines(controller)]
+
+
+def key_screen(controller: Controller) -> str | None:
+    """Which key screen covers the window: "splash", "help" (F1) or None."""
+    if controller.phase is Phase.SPLASH:
+        return "splash"
+    if controller.help_open:
+        return "help"
+    return None
+
+
+def key_screen_texts(controller: Controller) -> list[tuple[str, tuple[int, int], str]]:
+    """Texts of the key screen as (text, position, role), or [] when none is shown.
+
+    Roles: "title" and "hint" are centered on their position; "key" and "action"
+    start at it (left edge, top).
+    """
+    screen = key_screen(controller)
+    if screen is None:
+        return []
+    center_x = WINDOW_SIZE[0] // 2
+    texts = [(TITLE, (center_x, KEY_SCREEN_TITLE_Y), "title")]
+    for row, (keys, action) in enumerate(HOTKEYS):
+        y = KEY_TABLE_Y + row * KEY_TABLE_STEP
+        texts.append((keys, (KEY_COLUMN_X, y), "key"))
+        texts.append((action, (ACTION_COLUMN_X, y), "action"))
+    hint = SPLASH_HINT if screen == "splash" else HELP_HINT
+    texts.append((hint, (center_x, KEY_SCREEN_HINT_Y), "hint"))
+    return texts
 
 
 def screen_texts(controller: Controller) -> list[str]:
     """Every text drawn on screen, in drawing order."""
+    key_texts = key_screen_texts(controller)
+    if key_texts:
+        return [text for text, _, _ in key_texts]
     return [text for text, _ in panel_texts(controller)] + overlay_texts(controller)

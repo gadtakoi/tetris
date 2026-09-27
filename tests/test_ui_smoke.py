@@ -1,3 +1,4 @@
+import json
 import os
 import time
 
@@ -13,7 +14,7 @@ from tetris.board import HEIGHT, HIDDEN_ROWS, WIDTH  # noqa: E402
 from tetris.game import ActivePiece, Game  # noqa: E402
 from tetris.pieces import PieceType  # noqa: E402
 from tetris_ui import app, layout, render  # noqa: E402
-from tetris_ui.input import Controller, Key  # noqa: E402
+from tetris_ui.input import Controller, Key, Phase  # noqa: E402
 
 VISIBLE_CELLS = [(c, r) for r in range(HIDDEN_ROWS, HEIGHT) for c in range(WIDTH)]
 
@@ -100,9 +101,17 @@ def test_next_piece_preview():
 def test_ghost_of_t_piece():
     game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
     surface = draw_game(game)
-    assert layout.ghost_color(PieceType.T) == (40, 0, 60)
+    assert layout.ghost_color(PieceType.T) == (20, 0, 30)
     for cell in [(4, 20), (3, 21), (4, 21), (5, 21)]:
-        assert center_color(surface, layout.cell_rect(*cell)) == (40, 0, 60)
+        assert center_color(surface, layout.cell_rect(*cell)) == (20, 0, 30)
+
+
+def test_grid_shows_through_the_ghost():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    surface = draw_game(game)
+    assert layout.cell_rect(4, 20)[:2] == (140, 560)
+    for pixel in [(140, 575), (155, 560)]:  # left and top edges of ghost cell (4, 20)
+        assert tuple(surface.get_at(pixel))[:3] == layout.GRID
 
 
 def test_piece_on_floor_covers_its_ghost():
@@ -150,7 +159,7 @@ def test_pause_keeps_board_visible_under_shade():
 def test_window_size_and_title():
     screen = app.create_window()
     assert screen.get_size() == (520, 640)
-    assert pygame.display.get_caption()[0] == "Tetris"
+    assert pygame.display.get_caption()[0] == "SEVA Tetris"
 
 
 @pytest.fixture
@@ -186,6 +195,12 @@ def test_quit_event_ends_main_early(data_dir):
         (pygame.K_RETURN, Key.RESTART),
         (pygame.K_m, Key.TOGGLE_MUSIC),
         (pygame.K_n, Key.TOGGLE_SOUND),
+        (pygame.K_MINUS, Key.VOLUME_DOWN),
+        (pygame.K_KP_MINUS, Key.VOLUME_DOWN),
+        (pygame.K_EQUALS, Key.VOLUME_UP),
+        (pygame.K_PLUS, Key.VOLUME_UP),
+        (pygame.K_KP_PLUS, Key.VOLUME_UP),
+        (pygame.K_F1, Key.HELP),
     ],
 )
 def test_key_map(pygame_key, key):
@@ -238,3 +253,67 @@ def test_game_over_table_renders():
 def test_quit_event_stops_loop():
     controller = Controller(Game(seed=1))
     assert not app.handle_event(pygame.event.Event(pygame.QUIT), controller)
+
+
+# --- Saved sound settings --------------------------------------------------
+
+
+def test_saved_settings_apply_after_restart(data_dir):
+    (data_dir / "settings.json").write_text(
+        '{"version": 1, "music_on": false, "sound_on": true, "music_volume": 30}',
+        encoding="utf-8",
+    )
+    controller = app.create_controller()
+    assert (controller.music_on, controller.sound_on, controller.music_volume) == (False, True, 30)
+    controller.key_down(Key.RESTART)  # leave the splash so the side panel is shown
+    assert "MUSIC OFF" in layout.screen_texts(controller)
+
+
+def test_settings_change_is_saved(data_dir):
+    controller = app.create_controller()
+    app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_n), controller)
+    saved = json.loads((data_dir / "settings.json").read_text(encoding="utf-8"))
+    assert saved["sound_on"] is False
+    assert app.create_controller().sound_on is False  # the next launch picks it up
+
+
+# --- Splash and help screens -----------------------------------------------
+
+
+def test_splash_covers_the_field():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    controller = Controller(game, splash=True)
+    surface = draw_game(game, controller)
+    assert center_color(surface, layout.cell_rect(4, 21)) == layout.WINDOW_BG
+    assert center_color(surface, layout.cell_rect(4, 2)) != layout.PIECE_COLORS[PieceType.T]
+
+
+@pytest.mark.parametrize("screen", ["splash", "help"])
+def test_key_screen_texts_fit_the_window(screen):
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    controller = Controller(game, splash=screen == "splash")
+    if screen == "help":
+        controller.key_down(Key.HELP)
+    fonts = render.make_fonts()
+    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    for text, pos, role in layout.key_screen_texts(controller):
+        font = fonts.big if role == "title" else fonts.small
+        rect = pygame.Rect((0, 0), font.size(text))
+        if role in ("title", "hint"):
+            rect.center = pos
+        else:
+            rect.topleft = pos
+        assert window.contains(rect), text
+    draw_game(game, controller)  # renders without errors
+
+
+def test_key_columns_do_not_overlap():
+    fonts = render.make_fonts()
+    widest_key = max(fonts.small.size(keys)[0] for keys, _ in layout.HOTKEYS)
+    assert layout.KEY_COLUMN_X + widest_key < layout.ACTION_COLUMN_X
+
+
+def test_app_starts_on_the_splash(data_dir):
+    controller = app.create_controller()
+    assert controller.phase is Phase.SPLASH
+    assert layout.screen_texts(controller)[0] == "SEVA Tetris"

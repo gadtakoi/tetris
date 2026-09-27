@@ -9,6 +9,8 @@ BoxCell = tuple[int, int]
 
 
 class PieceType(Enum):
+    """The seven tetrominoes, named after the letters they look like."""
+
     I = "I"
     O = "O"
     T = "T"
@@ -42,6 +44,7 @@ def _rotate_cw(cells: tuple[BoxCell, ...], size: int) -> tuple[BoxCell, ...]:
 
 
 def _build_rotations() -> dict[PieceType, tuple[tuple[BoxCell, ...], ...]]:
+    """Precompute the four orientations of every piece from its orientation 0."""
     rotations = {}
     for piece_type, (size, base) in _BASE_SHAPES.items():
         states = [tuple(sorted(base))]
@@ -59,6 +62,7 @@ _ROTATIONS = _build_rotations()
 
 
 def box_size(piece_type: PieceType) -> int:
+    """Side of the piece's square bounding box: 4 for I and O, 3 for the others."""
     return _BASE_SHAPES[piece_type][0]
 
 

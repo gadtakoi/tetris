@@ -17,6 +17,8 @@ TABLE_LINE_STEP = 28
 
 @dataclass(frozen=True)
 class Fonts:
+    """The fonts on screen: small for the panel and key screen, big for titles, table for high score rows."""
+
     small: pygame.font.Font
     big: pygame.font.Font
     table: pygame.font.Font
@@ -32,6 +34,10 @@ def make_fonts() -> Fonts:
 
 
 def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
+    """Draw one frame: the key screen, or the field, pieces, panel and overlay."""
+    if layout.key_screen(controller) is not None:
+        _draw_key_screen(surface, controller, fonts)
+        return
     game = controller.game
     surface.fill(layout.WINDOW_BG)
     _draw_field(surface)
@@ -45,7 +51,7 @@ def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
         ghost = layout.ghost_color(game.active.type)
         for col, row in game.ghost_cells():
             if row >= HIDDEN_ROWS:
-                _fill_cell(surface, layout.cell_rect(col, row), ghost)
+                _fill_ghost(surface, layout.cell_rect(col, row), ghost)
         for col, row in game.active.cells():
             if row >= HIDDEN_ROWS:
                 _draw_cell(surface, layout.cell_rect(col, row), game.active.type)
@@ -58,6 +64,7 @@ def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
 
 
 def _draw_field(surface: pygame.Surface) -> None:
+    """Draw the field background, the grid lines and the border."""
     field = pygame.Rect(layout.FIELD_X, layout.FIELD_Y, layout.FIELD_W, layout.FIELD_H)
     surface.fill(layout.FIELD_BG, field)
     for col in range(1, WIDTH):
@@ -70,15 +77,24 @@ def _draw_field(surface: pygame.Surface) -> None:
 
 
 def _draw_cell(surface: pygame.Surface, rect: layout.Rect, piece_type: PieceType) -> None:
+    """Draw one cell of a piece in the piece's color."""
     _fill_cell(surface, rect, layout.PIECE_COLORS[piece_type])
 
 
 def _fill_cell(surface: pygame.Surface, rect: layout.Rect, color: layout.Color) -> None:
+    """Fill a cell with a color and outline it."""
     surface.fill(color, rect)
     pygame.draw.rect(surface, layout.CELL_OUTLINE, rect, width=1)
 
 
+def _fill_ghost(surface: pygame.Surface, rect: layout.Rect, color: layout.Color) -> None:
+    """Fill a ghost cell without an outline, leaving its top and left grid lines visible."""
+    x, y, w, h = rect
+    surface.fill(color, (x + 1, y + 1, w - 1, h - 1))
+
+
 def _draw_preview(surface: pygame.Surface, piece_type: PieceType) -> None:
+    """Draw the next piece in orientation 0 in the preview box."""
     for r, c in shape_cells(piece_type, 0):
         rect = (
             layout.PREVIEW_X + c * layout.CELL,
@@ -89,9 +105,27 @@ def _draw_preview(surface: pygame.Surface, piece_type: PieceType) -> None:
         _draw_cell(surface, rect, piece_type)
 
 
+def _draw_key_screen(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
+    """Fill the window with the title, the hotkey table and the hint."""
+    surface.fill(layout.WINDOW_BG)
+    for text, pos, role in layout.key_screen_texts(controller):
+        font = fonts.big if role == "title" else fonts.small
+        color = layout.HIGHLIGHT if role == "key" else layout.TEXT
+        image = font.render(text, True, color)
+        if role in ("title", "hint"):
+            surface.blit(image, image.get_rect(center=pos))
+        else:
+            surface.blit(image, pos)
+
+
 def _draw_overlay(
     surface: pygame.Surface, lines: list[tuple[str, layout.Color]], fonts: Fonts
 ) -> None:
+    """Shade the field and write the overlay lines over it.
+
+    The first line is a big title; the other lines go below it in the table font. A lone
+    title (PAUSE) is centered on the field.
+    """
     shade = pygame.Surface((layout.FIELD_W, layout.FIELD_H), pygame.SRCALPHA)
     shade.fill((0, 0, 0, layout.OVERLAY_ALPHA))
     surface.blit(shade, (layout.FIELD_X, layout.FIELD_Y))

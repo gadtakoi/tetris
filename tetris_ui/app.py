@@ -25,13 +25,36 @@ KEY_MAP: dict[int, Key] = {
     pygame.K_BACKSPACE: Key.BACKSPACE,
     pygame.K_m: Key.TOGGLE_MUSIC,
     pygame.K_n: Key.TOGGLE_SOUND,
+    pygame.K_MINUS: Key.VOLUME_DOWN,
+    pygame.K_KP_MINUS: Key.VOLUME_DOWN,
+    pygame.K_EQUALS: Key.VOLUME_UP,  # the "+" key without Shift
+    pygame.K_PLUS: Key.VOLUME_UP,
+    pygame.K_KP_PLUS: Key.VOLUME_UP,
+    pygame.K_F1: Key.HELP,
 }
 
 
 def create_window() -> pygame.Surface:
+    """Open the game window at WINDOW_SIZE with the game title."""
     screen = pygame.display.set_mode(layout.WINDOW_SIZE)
     pygame.display.set_caption(layout.TITLE)
     return screen
+
+
+def create_controller() -> Controller:
+    """A controller that starts on the splash screen, with the saved high scores and
+    sound settings; every change to them is written back to the data folder.
+    """
+    scores_path = storage.high_scores_path()
+    settings_path = storage.settings_path()
+    return Controller(
+        Game(),
+        storage.load(scores_path),
+        on_save=lambda scores: storage.save(scores, scores_path),
+        settings=storage.load_settings(settings_path),
+        on_settings_change=lambda settings: storage.save_settings(settings, settings_path),
+        splash=True,
+    )
 
 
 def handle_event(event: pygame.event.Event, controller: Controller) -> bool:
@@ -57,12 +80,7 @@ def main(max_frames: int | None = None) -> int:
         screen = create_window()
         fonts = render.make_fonts()
         clock = pygame.time.Clock()
-        scores_path = storage.high_scores_path()
-        controller = Controller(
-            Game(),
-            storage.load(scores_path),
-            on_save=lambda scores: storage.save(scores, scores_path),
-        )
+        controller = create_controller()
         pygame.key.start_text_input()
         audio = Audio.create()
         frames = 0

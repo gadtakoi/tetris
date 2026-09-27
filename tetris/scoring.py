@@ -17,4 +17,5 @@ def points_for(lines_cleared: int, level: int) -> int:
 
 
 def level_for(total_lines: int) -> int:
+    """Level reached after clearing total_lines lines: one level per LINES_PER_LEVEL lines."""
     return total_lines // LINES_PER_LEVEL
