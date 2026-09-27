@@ -6,6 +6,7 @@ from tetris.board import HIDDEN_ROWS, HEIGHT, VISIBLE_HEIGHT, WIDTH
 from tetris.pieces import PieceType
 from tetris_ui import menus
 from tetris_ui.input import Controller, Phase
+from tetris_ui.texts import music_volume_text, name_line, sound_volume_text, tr
 
 WINDOW_SIZE = (520, 640)
 TITLE = "SEVA Tetris"
@@ -66,6 +67,13 @@ KEY_COLUMN_X, ACTION_COLUMN_X = 70, 270  # left edges of the two columns
 SCREEN_HINT_Y = 590
 KEY_SCREEN_HINT_Y = 600
 
+# Widths the texts must fit in; a text too wide for its font is drawn smaller.
+PANEL_W = WINDOW_SIZE[0] - PANEL_X  # side panel
+SCREEN_TEXT_W = WINDOW_SIZE[0] - 2 * 20  # full-window screens, 20 px margins
+KEY_COLUMN_W = 190  # from KEY_COLUMN_X to 10 px before ACTION_COLUMN_X
+ACTION_COLUMN_W = 240  # from ACTION_COLUMN_X to 10 px before the right edge
+MIN_FONT_SIZE = 14
+
 Color = tuple[int, int, int]
 Rect = tuple[int, int, int, int]
 
@@ -108,18 +116,28 @@ def cell_rect(col: int, row: int) -> Rect:
     return FIELD_X + CELL * col, FIELD_Y + CELL * (row - HIDDEN_ROWS), CELL, CELL
 
 
+def _language(controller: Controller) -> str:
+    """The interface language chosen in the settings."""
+    return controller.settings.language
+
+
 def panel_texts(controller: Controller) -> list[tuple[str, tuple[int, int]]]:
     """Side panel texts with their top-left positions."""
+    language = _language(controller)
     game = controller.game
     values = (game.score, game.lines, game.level)
-    texts = [("NEXT", (PANEL_X, NEXT_LABEL_Y)), ("HOLD", (PANEL_X, HOLD_LABEL_Y))]
+    texts = [(tr("NEXT", language), (PANEL_X, NEXT_LABEL_Y)),
+             (tr("HOLD", language), (PANEL_X, HOLD_LABEL_Y))]
     for (label, y), value in zip(COUNTER_LABELS, values):
-        texts.append((label, (PANEL_X, y)))
+        texts.append((tr(label, language), (PANEL_X, y)))
         texts.append((str(value), (PANEL_X, y + VALUE_OFFSET_Y)))
-    texts.append((f"MUSIC {_on_off(controller.music_on)}", (PANEL_X, MUSIC_Y)))
-    texts.append((f"MUSIC {controller.music_volume}%", (PANEL_X, VOLUME_Y)))
-    texts.append((f"SOUND {_on_off(controller.sound_on)}", (PANEL_X, SOUND_Y)))
-    texts.append((f"SOUND {controller.settings.sfx_volume}%", (PANEL_X, SFX_VOLUME_Y)))
+    music = f"MUSIC {_on_off(controller.music_on)}"
+    sound = f"SOUND {_on_off(controller.sound_on)}"
+    texts.append((tr(music, language), (PANEL_X, MUSIC_Y)))
+    texts.append((music_volume_text(controller.music_volume, language), (PANEL_X, VOLUME_Y)))
+    texts.append((tr(sound, language), (PANEL_X, SOUND_Y)))
+    texts.append((sound_volume_text(controller.settings.sfx_volume, language),
+                  (PANEL_X, SFX_VOLUME_Y)))
     return texts
 
 
@@ -132,15 +150,35 @@ def overlay_lines(controller: Controller) -> list[tuple[str, Color]]:
     """Lines shown over the field with their colors, or none during normal play."""
     phase = controller.phase
     if phase is Phase.NAME_ENTRY:
-        return [("GAME OVER", TEXT), ("NEW RECORD", TEXT), (f"Name: {controller.name}_", TEXT)]
+        return _name_entry_lines(controller)
     if phase is Phase.TABLE:
-        lines = [("GAME OVER", TEXT), (SCORES_TITLE, TEXT)]
-        lines += score_rows(controller)
-        lines += [(hint, TEXT) for hint in TABLE_HINTS]
-        return lines
+        return _table_lines(controller)
     if controller.paused:
-        return [(PAUSE_TITLE, TEXT)] + _items(menus.PAUSE_ITEMS, controller.pause_index)
+        return _pause_lines(controller)
     return []
+
+
+def _name_entry_lines(controller: Controller) -> list[tuple[str, Color]]:
+    """Game over with a record: the title, NEW RECORD and the name being typed."""
+    language = _language(controller)
+    return [(tr("GAME OVER", language), TEXT), (tr("NEW RECORD", language), TEXT),
+            (name_line(controller.name, language), TEXT)]
+
+
+def _table_lines(controller: Controller) -> list[tuple[str, Color]]:
+    """Game over without name entry: the title, the high score table and the hints."""
+    language = _language(controller)
+    lines = [(tr("GAME OVER", language), TEXT), (tr(SCORES_TITLE, language), TEXT)]
+    lines += score_rows(controller)
+    lines += [(tr(hint, language), TEXT) for hint in TABLE_HINTS]
+    return lines
+
+
+def _pause_lines(controller: Controller) -> list[tuple[str, Color]]:
+    """The pause title and the pause menu items."""
+    language = _language(controller)
+    return ([(tr(PAUSE_TITLE, language), TEXT)]
+            + _items(menus.PAUSE_ITEMS, controller.pause_index, language))
 
 
 def score_rows(controller: Controller) -> list[tuple[str, Color]]:
@@ -148,7 +186,7 @@ def score_rows(controller: Controller) -> list[tuple[str, Color]]:
     no-records line for an empty table."""
     entries = controller.scores.entries
     if not entries:
-        return [(NO_RECORDS, TEXT)]
+        return [(tr(NO_RECORDS, _language(controller)), TEXT)]
     return [
         (f"{place}. {entry.name} {entry.score}",
          HIGHLIGHT if place == controller.highlight else TEXT)
@@ -156,9 +194,10 @@ def score_rows(controller: Controller) -> list[tuple[str, Color]]:
     ]
 
 
-def _items(items: tuple[str, ...], selected: int) -> list[tuple[str, Color]]:
-    """Menu items with the selected one highlighted."""
-    return [(item, HIGHLIGHT if i == selected else TEXT) for i, item in enumerate(items)]
+def _items(items: tuple[str, ...], selected: int, language: str) -> list[tuple[str, Color]]:
+    """Menu items in the language, with the selected one highlighted."""
+    return [(tr(item, language), HIGHLIGHT if i == selected else TEXT)
+            for i, item in enumerate(items)]
 
 
 def overlay_texts(controller: Controller) -> list[str]:
@@ -181,6 +220,7 @@ def full_screen(controller: Controller) -> str | None:
 
 
 ScreenText = tuple[str, tuple[int, int], str, Color]
+FULL_SCREENS = ("menu", "scores", "settings", "controls", "help")
 
 
 def full_screen_texts(controller: Controller) -> list[ScreenText]:
@@ -193,29 +233,48 @@ def full_screen_texts(controller: Controller) -> list[ScreenText]:
     screen = full_screen(controller)
     if screen is None:
         return []
+    return _screen_texts(controller, screen)
+
+
+def _screen_texts(controller: Controller, screen: str) -> list[ScreenText]:
+    """Texts of one of FULL_SCREENS for the controller's state and language."""
+    language = _language(controller)
     center_x = WINDOW_SIZE[0] // 2
     if screen == "menu":
         texts = [(TITLE, (center_x, MENU_TITLE_Y), "title", TEXT)]
-        items = _items(menus.MAIN_ITEMS, controller.menu_index)
+        items = _items(menus.MAIN_ITEMS, controller.menu_index, language)
         texts += _column(items, center_x, MENU_ITEMS_Y, MENU_ITEMS_STEP)
-        return texts + [(MENU_HINT, (center_x, SCREEN_HINT_Y), "hint", TEXT)]
+        return texts + [(tr(MENU_HINT, language), (center_x, SCREEN_HINT_Y), "hint", TEXT)]
     if screen == "scores":
-        texts = [(SCORES_TITLE, (center_x, SCREEN_TITLE_Y), "title", TEXT)]
+        texts = [(tr(SCORES_TITLE, language), (center_x, SCREEN_TITLE_Y), "title", TEXT)]
         texts += _column(score_rows(controller), center_x, SCORES_ROWS_Y, SCORES_ROWS_STEP)
-        return texts + [(RETURN_HINT, (center_x, SCREEN_HINT_Y), "hint", TEXT)]
+        return texts + [(tr(RETURN_HINT, language), (center_x, SCREEN_HINT_Y), "hint", TEXT)]
     if screen == "settings":
-        texts = [(SETTINGS_TITLE, (center_x, SCREEN_TITLE_Y), "title", TEXT)]
-        rows = [menus.setting_line(controller.settings, row) for row in menus.SETTING_ROWS]
-        items = _items((*rows, menus.BACK), controller.settings_index)
+        texts = [(tr(SETTINGS_TITLE, language), (center_x, SCREEN_TITLE_Y), "title", TEXT)]
+        rows = [_setting_line(controller, row) for row in menus.SETTING_ROWS]
+        items = _items((*rows, menus.BACK), controller.settings_index, language)
         texts += _column(items, center_x, SETTINGS_ROWS_Y, SETTINGS_ROWS_STEP)
-        return texts + [(SETTINGS_HINT, (center_x, SCREEN_HINT_Y), "hint", TEXT)]
+        return texts + [(tr(SETTINGS_HINT, language), (center_x, SCREEN_HINT_Y), "hint", TEXT)]
     texts = [(TITLE, (center_x, KEY_SCREEN_TITLE_Y), "title", TEXT)]
     for row, (keys, action) in enumerate(HOTKEYS):
         y = KEY_TABLE_Y + row * KEY_TABLE_STEP
-        texts.append((keys, (KEY_COLUMN_X, y), "key", HIGHLIGHT))
-        texts.append((action, (ACTION_COLUMN_X, y), "action", TEXT))
+        texts.append((tr(keys, language), (KEY_COLUMN_X, y), "key", HIGHLIGHT))
+        texts.append((tr(action, language), (ACTION_COLUMN_X, y), "action", TEXT))
     hint = RETURN_HINT if screen == "controls" else HELP_HINT
-    return texts + [(hint, (center_x, KEY_SCREEN_HINT_Y), "hint", TEXT)]
+    return texts + [(tr(hint, language), (center_x, KEY_SCREEN_HINT_Y), "hint", TEXT)]
+
+
+def _setting_line(controller: Controller, row: str) -> str:
+    """A settings row "<label>: <value>" with the label and value in the language."""
+    language = _language(controller)
+    label = menus.setting_label(row)
+    value = menus.setting_value(controller.settings, row)
+    return f"{tr(label, language)}: {tr(value, language)}"
+
+
+def screen_text_width(role: str) -> int:
+    """The width a full-window screen text of this role must fit in."""
+    return {"key": KEY_COLUMN_W, "action": ACTION_COLUMN_W}.get(role, SCREEN_TEXT_W)
 
 
 def _column(
@@ -234,3 +293,15 @@ def screen_texts(controller: Controller) -> list[str]:
     if full:
         return [text for text, _, _, _ in full]
     return [text for text, _ in panel_texts(controller)] + overlay_texts(controller)
+
+
+def all_screen_texts(controller: Controller) -> list[str]:
+    """The texts of every screen for the controller's settings, whatever is shown now:
+    the panel, the pause, name entry and table overlays, and all full-window screens."""
+    texts = [text for text, _ in panel_texts(controller)]
+    for lines in (_pause_lines(controller), _name_entry_lines(controller),
+                  _table_lines(controller)):
+        texts += [text for text, _ in lines]
+    for screen in FULL_SCREENS:
+        texts += [text for text, _, _, _ in _screen_texts(controller, screen)]
+    return texts

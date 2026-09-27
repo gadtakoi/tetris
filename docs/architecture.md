@@ -7,7 +7,7 @@
 - **`tetris/` — логика игры.** Поле, фигуры, команды, очки, уровни, гравитация, правила таблицы рекордов. Чистый Python: без pygame, без файлов и без системных часов. Время приходит только через `Game.tick(dt_ms)`, случайность — через передаваемый `random.Random`. Поэтому логика детерминирована и полностью проверяется тестами. Тест [tests/test_architecture.py](../tests/test_architecture.py) следит, чтобы pygame сюда не попал.
 - **`tetris_ui/` — интерфейс.** Окно, клавиатура, отрисовка, звук, хранение рекордов и настроек. Он только читает состояние логики и передаёт ей команды; правил игры в нём нет.
 
-Внутри `tetris_ui/` тоже есть граница: модули `input`, `menus`, `layout`, `settings`, `synth`, `music` не импортируют pygame и тестируются напрямую, а `app`, `render`, `audio` работают с pygame и проверяются дымовыми тестами с SDL-драйверами `dummy` (без окна и без звуковой карты).
+Внутри `tetris_ui/` тоже есть граница: модули `input`, `menus`, `texts`, `layout`, `settings`, `synth`, `music` не импортируют pygame и тестируются напрямую, а `app`, `render`, `audio` работают с pygame и проверяются дымовыми тестами с SDL-драйверами `dummy` (без окна и без звуковой карты).
 
 ## Зависимости модулей
 
@@ -18,7 +18,7 @@ flowchart TB
         cli -.->|"после разбора аргументов"| app
         app --> input & render & audio & storage & layout
         render --> layout & input
-        layout --> input & menus
+        layout --> input & menus & texts
         input --> menus
         menus --> settings
         audio --> synth & music & input
@@ -54,8 +54,9 @@ flowchart TB
 | `tetris/highscores.py` | Правила таблицы рекордов: порядок, попадание, имя, JSON |
 | `tetris_ui/input.py` | `Controller`: фазы экрана, клавиши, главное меню и его экраны, автоповтор, меню паузы, экран клавиш, ввод имени, настройки, звуковые события кадра |
 | `tetris_ui/menus.py` | Пункты главного меню и меню паузы, строки экрана настроек, правила изменения настроек, предустановки автоповтора (без pygame) |
-| `tetris_ui/layout.py` | Размеры, координаты и цвета, все надписи экрана (без pygame) |
-| `tetris_ui/render.py` | Рисование кадра на поверхности pygame |
+| `tetris_ui/texts.py` | Русский перевод всех постоянных надписей и шаблоны надписей с числами и именем (без pygame) |
+| `tetris_ui/layout.py` | Размеры, координаты и цвета, все надписи экрана на выбранном языке, ширины областей для надписей (без pygame) |
+| `tetris_ui/render.py` | Рисование кадра на поверхности pygame, подбор размера шрифта под ширину области |
 | `tetris_ui/app.py` | Окно, игровой цикл, перевод клавиш pygame в `Key`, сборка контроллера |
 | `tetris_ui/settings.py` | Настройки игрока (звук, язык, стартовый уровень, тень, автоповтор): значения по умолчанию, проверка, JSON |
 | `tetris_ui/storage.py` | Папка данных, чтение и атомарная запись `highscores.json` и `settings.json` |
@@ -153,4 +154,4 @@ stateDiagram-v2
 
 ## Нормативные спецификации
 
-Поведение, описанное здесь в общих чертах, точно задано в спецификациях: [game-screen](../openspec/specs/game-screen/spec.md), [controls](../openspec/specs/controls/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [distribution](../openspec/specs/distribution/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md).
+Поведение, описанное здесь в общих чертах, точно задано в спецификациях: [game-screen](../openspec/specs/game-screen/spec.md), [controls](../openspec/specs/controls/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [distribution](../openspec/specs/distribution/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md), [localization](../openspec/specs/localization/spec.md).

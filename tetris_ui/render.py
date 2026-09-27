@@ -2,36 +2,69 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pygame
 
 from tetris.board import HIDDEN_ROWS, HEIGHT, WIDTH
 from tetris.pieces import PieceType, shape_cells
 from tetris_ui import layout
-from tetris_ui.input import Controller
+from tetris_ui.input import Controller, Phase
 
+SMALL_FONT_SIZE = 32
+BIG_FONT_SIZE = 56
 TABLE_FONT_SIZE = 26
 TABLE_LINE_STEP = 28
+FONT_SIZE_STEP = 2  # how much smaller each try is when a text does not fit
 
 
 @dataclass(frozen=True)
 class Fonts:
     """The fonts on screen: small for the panel and full-window screens, big for titles,
-    table for the lines over the field."""
+    table for the lines over the field. Smaller sizes for texts that do not fit are
+    made on demand and kept."""
 
     small: pygame.font.Font
     big: pygame.font.Font
     table: pygame.font.Font
+    _by_size: dict[int, pygame.font.Font] = field(default_factory=dict, repr=False)
+
+    def sized(self, size: int) -> pygame.font.Font:
+        """The built-in font at `size` pixels."""
+        if size not in self._by_size:
+            self._by_size[size] = pygame.font.Font(None, size)
+        return self._by_size[size]
 
 
 def make_fonts() -> Fonts:
     """Built-in pygame font, so no system fonts are needed. Requires pygame.font.init()."""
-    return Fonts(
-        small=pygame.font.Font(None, 32),
-        big=pygame.font.Font(None, 56),
+    fonts = Fonts(
+        small=pygame.font.Font(None, SMALL_FONT_SIZE),
+        big=pygame.font.Font(None, BIG_FONT_SIZE),
         table=pygame.font.Font(None, TABLE_FONT_SIZE),
     )
+    fonts._by_size.update({SMALL_FONT_SIZE: fonts.small, BIG_FONT_SIZE: fonts.big,
+                           TABLE_FONT_SIZE: fonts.table})
+    return fonts
+
+
+def fitted_size(fonts: Fonts, base_size: int, text: str, max_width: int) -> int:
+    """The largest size from base_size down, in FONT_SIZE_STEP steps, at which the text
+    fits max_width; layout.MIN_FONT_SIZE if even that is too wide."""
+    size = base_size
+    while size > layout.MIN_FONT_SIZE and fonts.sized(size).size(text)[0] > max_width:
+        size = max(layout.MIN_FONT_SIZE, size - FONT_SIZE_STEP)
+    return size
+
+
+def fitted_font(fonts: Fonts, base_size: int, text: str, max_width: int) -> pygame.font.Font:
+    """The font for a text that must fit max_width: base_size if it fits, else smaller."""
+    return fonts.sized(fitted_size(fonts, base_size, text, max_width))
+
+
+def screen_font_size(role: str) -> int:
+    """The base font size of a full-window screen text with this role."""
+    return BIG_FONT_SIZE if role == "title" else SMALL_FONT_SIZE
 
 
 def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
@@ -65,10 +98,11 @@ def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
                       else layout.dimmed_color(game.held_type))
         _draw_preview(surface, game.held_type, layout.HOLD_X, layout.HOLD_Y, held_color)
     for text, pos in layout.panel_texts(controller):
-        surface.blit(fonts.small.render(text, True, layout.TEXT), pos)
+        font = fitted_font(fonts, SMALL_FONT_SIZE, text, layout.PANEL_W)
+        surface.blit(font.render(text, True, layout.TEXT), pos)
     overlay = layout.overlay_lines(controller)
     if overlay:
-        _draw_overlay(surface, overlay, fonts)
+        _draw_overlay(surface, overlay, fonts, paused=controller.phase is Phase.PLAYING)
 
 
 def _draw_field(surface: pygame.Surface) -> None:
@@ -113,7 +147,7 @@ def _draw_full_screen(surface: pygame.Surface, controller: Controller, fonts: Fo
     """Fill the window with the screen's title, lines and hint."""
     surface.fill(layout.WINDOW_BG)
     for text, pos, role, color in layout.full_screen_texts(controller):
-        font = fonts.big if role == "title" else fonts.small
+        font = fitted_font(fonts, screen_font_size(role), text, layout.screen_text_width(role))
         image = font.render(text, True, color)
         if role in ("key", "action"):
             surface.blit(image, pos)
@@ -122,7 +156,7 @@ def _draw_full_screen(surface: pygame.Surface, controller: Controller, fonts: Fo
 
 
 def _draw_overlay(
-    surface: pygame.Surface, lines: list[tuple[str, layout.Color]], fonts: Fonts
+    surface: pygame.Surface, lines: list[tuple[str, layout.Color]], fonts: Fonts, paused: bool
 ) -> None:
     """Shade the field and write the overlay lines over it.
 
@@ -134,14 +168,16 @@ def _draw_overlay(
     surface.blit(shade, (layout.FIELD_X, layout.FIELD_Y))
     center_x = layout.FIELD_X + layout.FIELD_W // 2
     (title, title_color), rest = lines[0], lines[1:]
-    if title == layout.PAUSE_TITLE:
+    if paused:
         title_y = layout.FIELD_Y + layout.FIELD_H // 2 - 40
     else:
         title_y = layout.FIELD_Y + 110
-    image = fonts.big.render(title, True, title_color)
+    font = fitted_font(fonts, BIG_FONT_SIZE, title, layout.FIELD_W)
+    image = font.render(title, True, title_color)
     surface.blit(image, image.get_rect(center=(center_x, title_y)))
     y = title_y + 60
     for text, color in rest:
-        image = fonts.table.render(text, True, color)
+        font = fitted_font(fonts, TABLE_FONT_SIZE, text, layout.FIELD_W)
+        image = font.render(text, True, color)
         surface.blit(image, image.get_rect(center=(center_x, y)))
         y += TABLE_LINE_STEP

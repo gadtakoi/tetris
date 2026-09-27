@@ -7,9 +7,11 @@ from tetris.highscores import Entry, HighScores
 from tetris_ui import menus
 from tetris_ui.input import Controller, Key, KeyRepeater, Phase, Sound
 from tetris_ui.settings import Settings
+from tetris_ui.texts import RU
 from tetris_ui.layout import (
     HIGHLIGHT,
     TEXT,
+    all_screen_texts,
     cell_rect,
     full_screen,
     full_screen_texts,
@@ -988,11 +990,11 @@ def test_ghost_setting():
     assert "Ghost: Off" in screen_texts(controller)
 
 
-def test_language_is_only_stored():
-    _, controller, _ = settings_controller()
+def test_language_setting_is_stored():
+    _, controller, reported = settings_controller()
     controller.key_down(Key.RIGHT)
     assert controller.settings.language == "ru"
-    assert "Language: Русский" in screen_texts(controller)
+    assert reported == [Settings(language="ru")]
 
 
 # --- Pause menu ------------------------------------------------------------
@@ -1332,3 +1334,151 @@ def test_effects_volume_change_is_reported():
     controller = Controller(FakeGame(), on_settings_change=reported.append)
     controller.key_down(Key.SFX_DOWN)
     assert reported == [Settings(sfx_volume=90)]
+
+
+# --- Russian interface -----------------------------------------------------
+
+
+def ru(**settings) -> Settings:
+    return Settings(language="ru", **settings)
+
+
+def test_english_by_default():
+    _, controller = menu_controller()
+    texts = screen_texts(controller)
+    assert "New game" in texts and "Settings" in texts
+
+
+def test_switch_to_russian():
+    _, controller, _ = settings_controller()
+    controller.key_down(Key.RIGHT)
+    texts = screen_texts(controller)
+    assert "Язык: Русский" in texts
+    assert texts[0] == "Настройки"
+    controller.key_down(Key.ESCAPE)
+    texts = screen_texts(controller)
+    assert "Новая игра" in texts and "Настройки" in texts
+    assert texts[0] == "SEVA Tetris"
+
+
+def test_switch_back_to_english():
+    _, controller, _ = settings_controller(language="ru")
+    controller.key_down(Key.LEFT)
+    assert screen_texts(controller)[:2] == ["Settings", "Language: English"]
+
+
+def test_names_and_numbers_are_not_translated():
+    table = HighScores()
+    table.add(Entry("Ann", 340, 3, 0))
+    _, controller = menu_controller(scores=table, settings=ru())
+    choose(controller, "High scores")
+    assert screen_texts(controller) == ["РЕКОРДЫ", "1. Ann 340", "Enter или Esc - назад"]
+
+
+def test_panel_in_russian():
+    controller = Controller(Game(seed=1), settings=ru())
+    assert screen_texts(controller) == [
+        "ДАЛЕЕ", "ЗАПАС", "ОЧКИ", "0", "ЛИНИИ", "0", "УРОВЕНЬ", "0",
+        "МУЗЫКА ВКЛ", "МУЗЫКА 50%", "ЗВУК ВКЛ", "ЗВУК 100%",
+    ]
+
+
+def test_switches_off_in_russian():
+    controller = Controller(Game(seed=1), settings=ru(music_on=False, sound_on=False))
+    texts = screen_texts(controller)
+    assert "МУЗЫКА ВЫКЛ" in texts and "ЗВУК ВЫКЛ" in texts
+
+
+def test_name_entry_in_russian():
+    controller = Controller(record_game(340), settings=ru())
+    controller.text_input("Иван")
+    assert overlay_texts(controller) == ["ИГРА ОКОНЧЕНА", "НОВЫЙ РЕКОРД", "Имя: Иван_"]
+
+
+def test_table_in_russian():
+    controller = Controller(finished_game(), settings=ru())
+    assert overlay_texts(controller) == [
+        "ИГРА ОКОНЧЕНА", "РЕКОРДЫ", "Рекордов пока нет", "Enter - новая игра",
+        "Esc - главное меню",
+    ]
+
+
+def test_pause_in_russian():
+    controller = Controller(Game(seed=1), settings=ru())
+    controller.key_down(Key.PAUSE)
+    assert overlay_lines(controller) == [
+        ("ПАУЗА", TEXT), ("Продолжить", HIGHLIGHT), ("Главное меню", TEXT),
+    ]
+
+
+def test_key_list_in_russian():
+    _, controller = menu_controller(settings=ru())
+    choose(controller, "Controls")
+    texts = screen_texts(controller)
+    pairs = list(zip(texts[1:-1:2], texts[2:-1:2]))
+    for pair in [("Влево / Вправо", "Сдвиг"), ("Пробел", "Жёсткое падение"),
+                 ("C / Shift", "Отложить"), ("9 / 0", "Громкость звука")]:
+        assert pair in pairs
+    assert texts[0] == "SEVA Tetris"
+    assert texts[-1] == "Enter или Esc - назад"
+
+
+def test_help_screen_in_russian():
+    controller = Controller(Game(seed=1), settings=ru())
+    controller.key_down(Key.HELP)
+    assert screen_texts(controller)[-1] == "F1 или Enter - назад"
+
+
+def test_setting_lines_in_russian():
+    _, controller, _ = settings_controller(language="ru")
+    assert screen_texts(controller)[1:-1] == [
+        "Язык: Русский",
+        "Музыка: Вкл",
+        "Громкость музыки: 50%",
+        "Звук: Вкл",
+        "Громкость звука: 100%",
+        "Начальный уровень: 0",
+        "Тень: Вкл",
+        "Автоповтор: Обычно",
+        "Назад",
+    ]
+    assert screen_texts(controller)[-1] == "Влево / Вправо - изменить, Esc - назад"
+
+
+@pytest.mark.parametrize(("settings", "line"), [
+    (ru(music_on=False), "Музыка: Выкл"),
+    (ru(autorepeat="slow"), "Автоповтор: Медленно"),
+    (ru(autorepeat="fast"), "Автоповтор: Быстро"),
+    (ru(ghost=False), "Тень: Выкл"),
+])
+def test_setting_values_in_russian(settings, line):
+    _, controller, _ = settings_controller(**{
+        field: getattr(settings, field) for field in ("language", "music_on", "autorepeat", "ghost")
+    })
+    assert line in screen_texts(controller)
+
+
+def test_menu_in_russian():
+    _, controller = menu_controller(settings=ru())
+    assert screen_texts(controller) == [
+        "SEVA Tetris", "Новая игра", "Рекорды", "Настройки", "Управление", "Выход",
+        "Вверх / Вниз - выбор, Enter - открыть",
+    ]
+
+
+def test_every_text_is_translated():
+    table = HighScores()
+    table.add(Entry("Ann", 340, 3, 0))
+    for settings in (ru(), ru(music_on=False, sound_on=False, ghost=False, autorepeat="slow"),
+                     ru(autorepeat="fast")):
+        controller = Controller(Game(seed=1), table, settings=settings)
+        left_english = set(all_screen_texts(controller)) & set(RU)
+        assert not left_english
+
+
+def test_english_texts_cover_every_screen():
+    controller = Controller(Game(seed=1))
+    texts = set(all_screen_texts(controller))
+    for text in ("NEXT", "PAUSE", "GAME OVER", "NEW RECORD", "New game", "Settings",
+                 "Language: English", "Move", "Press F1 or Enter to return"):
+        assert text in texts

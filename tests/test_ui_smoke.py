@@ -358,13 +358,13 @@ def press(controller: Controller, *keys: int) -> None:
         app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key), controller)
 
 
-def controller_on(screen: str) -> Controller:
+def controller_on(screen: str, language: str = "en") -> Controller:
     """A controller showing one of the full-window screens."""
     table = HighScores()
     for place in range(10):
         table.add(Entry("Ш" * 10, 9_999_999 - place, 0, 0))
     controller = Controller(Game(rng=ScriptedRng([PieceType.T, PieceType.S])), table,
-                            start_in_menu=True)
+                            settings=Settings(language=language), start_in_menu=True)
     if screen == "help":
         controller.key_down(Key.RESTART)
         controller.key_down(Key.HELP)
@@ -384,20 +384,26 @@ def test_menu_covers_the_field():
     assert center_color(surface, layout.cell_rect(4, 2)) != layout.PIECE_COLORS[PieceType.T]
 
 
+@pytest.mark.parametrize("language", ["en", "ru"])
 @pytest.mark.parametrize("screen", ["menu", "scores", "settings", "controls", "help"])
-def test_full_screen_texts_fit_the_window(screen):
-    controller = controller_on(screen)
+def test_full_screen_texts_fit_the_window(screen, language):
+    controller = controller_on(screen, language)
     fonts = render.make_fonts()
     window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
     rects = []
     for text, pos, role, _ in layout.full_screen_texts(controller):
-        font = fonts.big if role == "title" else fonts.small
-        rect = pygame.Rect((0, 0), font.size(text))
+        width = layout.screen_text_width(role)
+        size = render.fitted_size(fonts, render.screen_font_size(role), text, width)
+        assert size >= layout.MIN_FONT_SIZE, text
+        rect = pygame.Rect((0, 0), fonts.sized(size).size(text))
+        assert rect.width <= width, text
         if role in ("key", "action"):
             rect.topleft = pos
         else:
             rect.center = pos
         assert window.contains(rect), text
+        if role == "key":  # the key column ends before the action column starts
+            assert rect.right < layout.ACTION_COLUMN_X, text
         rects.append(rect)
     for i, rect in enumerate(rects):  # lines do not run into each other
         assert rect.collidelist(rects[i + 1:]) == -1, i
@@ -493,3 +499,91 @@ def test_sound_indicators_fit_the_window():
     window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
     for text, (x, y) in layout.panel_texts(controller):
         assert window.contains(pygame.Rect((x, y), fonts.small.size(text))), text
+
+
+# --- Russian interface -----------------------------------------------------
+
+
+def fitted_rect(fonts, base_size: int, text: str, width: int) -> pygame.Rect:
+    size = render.fitted_size(fonts, base_size, text, width)
+    assert size >= layout.MIN_FONT_SIZE, text
+    return pygame.Rect((0, 0), fonts.sized(size).size(text))
+
+
+def test_long_title_fits_the_field():
+    fonts = render.make_fonts()
+    assert fonts.big.size("ИГРА ОКОНЧЕНА")[0] > layout.FIELD_W  # needs a smaller size
+    rect = fitted_rect(fonts, render.BIG_FONT_SIZE, "ИГРА ОКОНЧЕНА", layout.FIELD_W)
+    assert rect.width <= layout.FIELD_W
+
+
+def test_english_texts_keep_their_size():
+    fonts = render.make_fonts()
+    for text in ("GAME OVER", "PAUSE", "HIGH SCORES"):
+        assert render.fitted_size(fonts, render.BIG_FONT_SIZE, text, layout.FIELD_W) == 56
+    assert render.fitted_size(fonts, 32, "SOUND 100%", layout.PANEL_W) == 32
+
+
+def test_fitted_size_stops_at_the_minimum():
+    fonts = render.make_fonts()
+    assert render.fitted_size(fonts, 32, "Ш" * 100, 50) == layout.MIN_FONT_SIZE
+
+
+def finished(language: str, record: bool) -> Controller:
+    game = Game(rng=ScriptedRng([PieceType.O]))
+    while not game.is_over:
+        game.hard_drop()
+    table = HighScores()
+    for place in range(9):
+        table.add(Entry("Ш" * 10, 9_999_999 - place, 0, 0))
+    game.score = 340 if record else 0
+    if not record:
+        table.add(Entry("Ш" * 10, 1_000_000, 0, 0))
+    controller = Controller(game, table, settings=Settings(language=language))
+    controller.text_input("Ш" * 10)
+    return controller
+
+
+def overlay_controllers(language: str) -> list[Controller]:
+    paused = Controller(Game(seed=1), settings=Settings(language=language))
+    paused.key_down(Key.PAUSE)
+    return [paused, finished(language, record=True), finished(language, record=False)]
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_overlay_and_panel_texts_fit(language):
+    fonts = render.make_fonts()
+    for controller in overlay_controllers(language):
+        lines = layout.overlay_lines(controller)
+        assert lines
+        (title, _), rest = lines[0], lines[1:]
+        assert fitted_rect(fonts, render.BIG_FONT_SIZE, title, layout.FIELD_W).width <= layout.FIELD_W
+        for text, _ in rest:
+            rect = fitted_rect(fonts, render.TABLE_FONT_SIZE, text, layout.FIELD_W)
+            assert rect.width <= layout.FIELD_W, text
+        draw_game(controller.game, controller)  # renders without errors
+    settings = Settings(language=language, music_on=False, sound_on=False, music_volume=100)
+    panel = Controller(Game(seed=1), settings=settings)
+    panel.game.score = 9_999_999
+    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    for text, (x, y) in layout.panel_texts(panel):
+        rect = fitted_rect(fonts, render.SMALL_FONT_SIZE, text, layout.PANEL_W)
+        rect.topleft = (x, y)
+        assert rect.width <= layout.PANEL_W and window.contains(rect), text
+
+
+def test_russian_screens_render():
+    for screen in ("menu", "scores", "settings", "controls", "help"):
+        controller = controller_on(screen, "ru")
+        draw_game(controller.game, controller)
+
+
+def test_language_survives_a_restart(data_dir):
+    controller = app.create_controller()
+    press(controller, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)  # Settings
+    press(controller, pygame.K_RIGHT)  # Language: Русский
+    again = app.create_controller()
+    assert layout.screen_texts(again)[:2] == ["SEVA Tetris", "Новая игра"]
+    screen = app.create_window()
+    assert screen.get_size() == (520, 640)
+    assert pygame.display.get_caption()[0] == "SEVA Tetris"
