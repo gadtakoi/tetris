@@ -4,7 +4,7 @@ import pytest
 
 from tests.helpers import ScriptedRng
 from tetris.board import HEIGHT, WIDTH
-from tetris.game import ActivePiece, Game, StepResult
+from tetris.game import LOCK_DELAY_MS, ActivePiece, Game, StepResult
 from tetris.pieces import PieceType
 
 
@@ -23,8 +23,10 @@ def occupied(game: Game) -> set[tuple[int, int]]:
 
 
 def drop_to_bottom(game: Game) -> None:
+    """Soft-drop the active piece to where it lies, then let the lock delay run out."""
     while game.step_down() is StepResult.MOVED:
         pass
+    game.tick(LOCK_DELAY_MS)
 
 
 def fill_rows(game: Game, rows: range, cols: range, piece_type=PieceType.J) -> None:
@@ -206,12 +208,15 @@ def test_lock_on_floor():
     assert game.active == ActivePiece.spawn(PieceType.J)
 
 
-def test_step_down_at_floor_locks_instead_of_moving():
+def test_step_down_at_floor_neither_moves_nor_locks():
     game = make_game(PieceType.O, PieceType.O)
     for _ in range(18):
         assert game.step_down() is StepResult.MOVED
     assert max(r for _, r in game.active.cells()) == 21
-    assert game.step_down() is StepResult.LOCKED
+    lying = game.active
+    assert game.step_down() is StepResult.REJECTED
+    assert game.active == lying
+    assert game.pieces_locked == 0
 
 
 def test_lock_on_top_of_another_piece():
@@ -289,7 +294,8 @@ def test_rows_cleared_before_next_piece_spawns():
     assert set(game.active.cells()) == {(9, 1), (9, 2), (9, 3), (9, 4)}
     fill_rows(game, range(3, 4), range(9))  # covers T's spawn cells in row 3
     game.board.place([(9, 5)], PieceType.Z)  # I cannot move down
-    assert game.step_down() is StepResult.LOCKED
+    game.tick(LOCK_DELAY_MS)
+    assert game.pieces_locked == 1
     assert game.last_cleared == 1
     assert not game.is_over
     assert game.active == ActivePiece.spawn(PieceType.T)
@@ -402,12 +408,13 @@ def test_new_game_has_no_locked_pieces():
 
 def test_locks_are_counted_whatever_their_cause():
     game = make_game(PieceType.O, PieceType.T)
-    drop_to_bottom(game)  # the player's step_down locks the O
+    assert game.hard_drop() is StepResult.LOCKED  # the O locks at once
     assert game.pieces_locked == 1
     for _ in range(16):  # the T now rests on the O without locking
         assert game.step_down() is StepResult.MOVED
+    assert game.step_down() is StepResult.REJECTED
     assert game.pieces_locked == 1
-    game.tick(800)  # gravity locks the T
+    game.tick(LOCK_DELAY_MS)  # the lock delay runs out
     assert game.pieces_locked == 2
 
 
@@ -419,6 +426,127 @@ def test_lock_that_ends_the_game_is_counted():
         if game.is_over:
             break
     assert game.pieces_locked == before + 1
+
+
+# --- Lock delay ------------------------------------------------------------
+
+
+def lower_to_lying(game: Game) -> None:
+    """Soft-drop the active piece until it lies; it must not lock on the way."""
+    while game.step_down() is StepResult.MOVED:
+        pass
+    assert game.pieces_locked == 0
+
+
+def test_lock_after_500_ms():
+    game = make_game(PieceType.O, PieceType.T)
+    lower_to_lying(game)
+    game.tick(499)
+    assert game.pieces_locked == 0
+    game.tick(1)
+    assert game.pieces_locked == 1
+    assert occupied(game) == {(4, 20), (5, 20), (4, 21), (5, 21)}
+    assert game.active == ActivePiece.spawn(PieceType.T)
+
+
+def test_move_restarts_the_lock_delay():
+    game = make_game(PieceType.T, PieceType.T)
+    lower_to_lying(game)
+    game.tick(400)
+    assert game.move_left()
+    game.tick(499)
+    assert game.pieces_locked == 0
+    game.tick(1)
+    assert game.pieces_locked == 1
+
+
+def test_rotation_restarts_the_lock_delay():
+    game = make_game(PieceType.T, PieceType.T)
+    lower_to_lying(game)
+    game.tick(400)
+    assert game.rotate_cw()  # an SRS floor kick keeps the piece lying
+    game.tick(499)
+    assert game.pieces_locked == 0
+    game.tick(1)
+    assert game.pieces_locked == 1
+
+
+def test_at_most_15_restarts():
+    game = make_game(PieceType.T, PieceType.T)
+    lower_to_lying(game)
+    locked_after_move = None
+    for move in range(1, 21):
+        assert (game.move_left if move % 2 else game.move_right)()
+        game.tick(100)
+        if game.pieces_locked:
+            locked_after_move = move
+            break
+    # The 15th move restarts the delay for the last time; it runs out 500 ms later.
+    assert locked_after_move == 19
+
+
+def test_getting_lower_gives_back_the_restarts():
+    game = make_game(PieceType.O, PieceType.T)
+    fill_rows(game, range(10, 11), range(3, 7))  # a ledge under columns 3-6
+    lower_to_lying(game)
+    assert set(game.active.cells()) == {(4, 8), (5, 8), (4, 9), (5, 9)}
+    for move in range(15):  # use up every restart on the ledge
+        assert (game.move_left if move % 2 == 0 else game.move_right)()
+        game.tick(10)
+    for _ in range(4):  # slide off the right end of the ledge
+        assert game.move_right()
+    assert game.pieces_locked == 0
+    lower_to_lying(game)  # falls to the floor, lower than ever before
+    assert max(r for _, r in game.active.cells()) == 21
+    for _ in range(3):  # restarts are available again: 1200 ms without locking
+        assert game.move_left()
+        game.tick(400)
+    assert game.pieces_locked == 0
+    game.tick(100)
+    assert game.pieces_locked == 1
+
+
+def test_soft_drop_on_the_floor_does_not_lock():
+    game = make_game(PieceType.O, PieceType.T)
+    lower_to_lying(game)
+    assert game.step_down() is StepResult.REJECTED
+    assert game.pieces_locked == 0
+    game.tick(500)
+    assert game.pieces_locked == 1
+
+
+def test_hard_drop_locks_without_delay():
+    game = make_game(PieceType.O, PieceType.T)
+    assert game.hard_drop() is StepResult.LOCKED
+    assert game.pieces_locked == 1
+
+
+def test_new_piece_starts_with_a_fresh_lock_delay():
+    game = make_game(PieceType.O, PieceType.O, PieceType.T)
+    game.board.place([(c, 4) for c in range(10) if c not in (4, 5)] + [(4, 4)], PieceType.Z)
+    game.tick(499)  # the first O lies on (4, 4) right after spawning
+    assert game.pieces_locked == 0
+    game.tick(1)
+    assert game.pieces_locked == 1
+
+
+def test_time_in_one_chunk_or_many_gives_the_same_game():
+    def fresh() -> Game:
+        game = make_game(PieceType.O, PieceType.T, PieceType.S)
+        for _ in range(17):  # one row above the floor
+            assert game.step_down() is StepResult.MOVED
+        return game
+
+    whole, pieces = fresh(), fresh()
+    whole.tick(1300)  # a gravity step at 800 ms, then 500 ms lying
+    for _ in range(13):
+        pieces.tick(100)
+    assert whole.pieces_locked == pieces.pieces_locked == 1
+    assert occupied(whole) == occupied(pieces)
+    assert whole.active == pieces.active
+    almost = fresh()
+    almost.tick(1299)
+    assert almost.pieces_locked == 0
 
 
 # --- Gravity ---------------------------------------------------------------
@@ -561,7 +689,7 @@ def test_block_out_ends_game():
     assert set(game.active.cells()) == {(1, 2), (0, 3), (1, 3), (2, 3)}
     game.board.place([(0, 4), (1, 4), (2, 4)], PieceType.Z)  # T lands right away
     game.board.place([(4, 3)], PieceType.Z)  # inside O's spawn cells
-    assert game.step_down() is StepResult.LOCKED
+    game.tick(LOCK_DELAY_MS)  # the T lies on the Z cells and locks
     assert game.is_over
 
 
@@ -602,6 +730,7 @@ def test_random_play_keeps_invariants(seed):
         game.rotate_ccw,
         game.step_down,
     ]
+    commands.append(game.hard_drop)  # without time, only hard drops lock pieces
     actions = random.Random(1000 + seed)
     prev_score, prev_lines = 0, 0
     for _ in range(500):
@@ -635,6 +764,7 @@ def test_random_play_with_gravity_keeps_invariants(seed):
         game.rotate_ccw,
         game.step_down,
     ]
+    commands.append(game.hard_drop)
     actions = random.Random(2000 + seed)
     for _ in range(1000):
         if actions.random() < 0.5:

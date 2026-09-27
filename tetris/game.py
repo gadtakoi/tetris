@@ -17,6 +17,10 @@ from tetris.scoring import level_for, points_for
 _UNITS_PER_MS = FRAMES_PER_SECOND
 _MS_PER_SECOND = 1000
 
+LOCK_DELAY_MS = 500  # how long a piece may lie on the stack before it locks
+MAX_LOCK_RESETS = 15  # moves or rotations that may restart that time, per piece
+_LOCK_DELAY_UNITS = LOCK_DELAY_MS * _UNITS_PER_MS
+
 
 class StepResult(Enum):
     """Outcome of moving the active piece down one row."""
@@ -79,33 +83,36 @@ class Game:
         self._gravity_time = 0  # accumulated time, in 1/60 ms
         self.active = ActivePiece.spawn(self._randomizer.next())
         self.next_type = self._randomizer.next()
+        self._reset_lock_delay()
 
     def move_left(self) -> bool:
         """Shift the active piece one column left; return whether it moved."""
-        return self._try(replace(self.active, col=self.active.col - 1))
+        return self._move(replace(self.active, col=self.active.col - 1))
 
     def move_right(self) -> bool:
         """Shift the active piece one column right; return whether it moved."""
-        return self._try(replace(self.active, col=self.active.col + 1))
+        return self._move(replace(self.active, col=self.active.col + 1))
 
     def rotate_cw(self) -> bool:
-        """Rotate the active piece clockwise in place (no wall kicks); return whether it turned."""
+        """Rotate the active piece clockwise with SRS kicks; return whether it turned."""
         return self._rotate(1)
 
     def rotate_ccw(self) -> bool:
-        """Rotate the active piece counterclockwise in place (no wall kicks); return whether it turned."""
+        """Rotate the active piece counterclockwise with SRS kicks; return whether it turned."""
         return self._rotate(ROTATION_COUNT - 1)
 
     def step_down(self) -> StepResult:
-        """The player's soft drop: move the active piece one row down, or lock it.
+        """The player's soft drop: move the active piece one row down.
 
-        A successful move restarts the gravity interval, so gravity does not add a second
-        step right after the player's one.
+        A piece that is lying cannot step down and is not locked by this command:
+        REJECTED is returned and the lock delay decides when it locks. A successful
+        move restarts the gravity interval, so gravity does not add a second step
+        right after the player's one.
         """
-        result = self._advance()
-        if result is StepResult.MOVED:
-            self._gravity_time = 0  # a player's drop restarts the gravity interval
-        return result
+        if not self._advance():
+            return StepResult.REJECTED
+        self._gravity_time = 0  # a player's drop restarts the gravity interval
+        return StepResult.MOVED
 
     def hard_drop(self) -> StepResult:
         """Drop the active piece straight to the lowest valid row and lock it."""
@@ -122,29 +129,70 @@ class Game:
         return self._dropped().cells()
 
     def tick(self, dt_ms: int) -> None:
-        """Advance time by dt_ms milliseconds, applying gravity steps as they fall due."""
+        """Advance time by dt_ms milliseconds: gravity steps and the lock delay.
+
+        Time is split into spans up to the next event (a gravity step or the end of
+        the lock delay), so the result does not depend on how the time is chunked.
+        The time left over after a lock is dropped.
+        """
         if dt_ms < 0:
             raise ValueError(f"dt_ms must not be negative, got {dt_ms}")
-        if self.is_over:
-            return
-        self._gravity_time += dt_ms * _UNITS_PER_MS
-        # A lock spawns the next piece, which resets the time and ends the loop.
-        while not self.is_over and self._gravity_time >= self._gravity_interval():
-            self._gravity_time -= self._gravity_interval()
-            self._advance()
+        remaining = dt_ms * _UNITS_PER_MS
+        while remaining > 0 and not self.is_over:
+            interval = self._gravity_interval()
+            span = min(remaining, interval - self._gravity_time)
+            lying = self._is_lying()
+            if lying:
+                span = min(span, _LOCK_DELAY_UNITS - self._lock_time)
+            remaining -= span
+            self._gravity_time += span
+            if lying:
+                self._lock_time += span
+                if self._lock_time >= _LOCK_DELAY_UNITS:
+                    self._lock()
+                    break
+            if self._gravity_time >= interval:
+                self._gravity_time = 0
+                self._advance()
 
     def _gravity_interval(self) -> int:
         """Gravity interval of the current level, in 1/60 ms."""
         return frames_per_row(self.level) * _MS_PER_SECOND
 
-    def _advance(self) -> StepResult:
-        """Move the active piece down one row, or lock it if it cannot move."""
-        if self.is_over:
-            return StepResult.REJECTED
-        if self._try(replace(self.active, row=self.active.row + 1)):
-            return StepResult.MOVED
-        self._lock()
-        return StepResult.LOCKED
+    def _advance(self) -> bool:
+        """Move the active piece down one row if it can; a lying piece stays put."""
+        if not self._try(replace(self.active, row=self.active.row + 1)):
+            return False
+        self._note_descent()
+        return True
+
+    def _is_lying(self) -> bool:
+        """Whether the active piece cannot move down even one row."""
+        return not self._fits(replace(self.active, row=self.active.row + 1))
+
+    def _move(self, candidate: ActivePiece) -> bool:
+        """Shift or turn the active piece to the candidate, applying the lock delay rules."""
+        was_lying = not self.is_over and self._is_lying()
+        if not self._try(candidate):
+            return False
+        if was_lying and self._resets_left > 0:
+            self._lock_time = 0  # moving a lying piece buys it a fresh lock delay
+            self._resets_left -= 1
+        self._note_descent()  # an SRS kick may move the piece down
+        return True
+
+    def _note_descent(self) -> None:
+        """Give back the full lock delay once the piece gets lower than ever before."""
+        if self.active.row > self._lowest_row:
+            self._lowest_row = self.active.row
+            self._resets_left = MAX_LOCK_RESETS
+            self._lock_time = 0
+
+    def _reset_lock_delay(self) -> None:
+        """Lock delay state of a newly arrived piece: no time lying, all resets left."""
+        self._lock_time = 0  # time spent lying, in 1/60 ms
+        self._resets_left = MAX_LOCK_RESETS
+        self._lowest_row = self.active.row
 
     def _dropped(self) -> ActivePiece:
         """The active piece moved straight down as far as it fits."""
@@ -164,7 +212,7 @@ class Game:
         for dx, dy in kick_offsets(active.type, active.rotation, rotation):
             # SRS offsets point up, board rows grow downward.
             candidate = replace(active, rotation=rotation, col=active.col + dx, row=active.row - dy)
-            if self._try(candidate):
+            if self._move(candidate):
                 return True
         return False
 
@@ -197,8 +245,8 @@ class Game:
     def _spawn(self, piece_type: PieceType) -> None:
         """Bring piece_type in at its spawn position and draw a new next piece.
 
-        Restarts the gravity interval. If the spawn cells are occupied the game is over
-        (block out) and the active piece is left as it was.
+        Restarts the gravity interval and the lock delay. If the spawn cells are
+        occupied the game is over (block out) and the active piece is left as it was.
         """
         self._gravity_time = 0
         piece = ActivePiece.spawn(piece_type)
@@ -207,3 +255,4 @@ class Game:
             return
         self.active = piece
         self.next_type = self._randomizer.next()
+        self._reset_lock_delay()

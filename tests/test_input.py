@@ -1,7 +1,7 @@
 import pytest
 
 from tests.helpers import ScriptedRng
-from tetris.game import Game, StepResult
+from tetris.game import Game
 from tetris.pieces import PieceType
 from tetris.highscores import Entry, HighScores
 from tetris_ui.input import Controller, Key, KeyRepeater, Phase, Sound
@@ -258,8 +258,7 @@ def test_game_over_ignores_keys_and_time(controller, game):
 def finished_game() -> Game:
     game = Game(rng=ScriptedRng([PieceType.O]))
     while not game.is_over:
-        while game.step_down() is StepResult.MOVED:
-            pass
+        game.hard_drop()
     return game
 
 
