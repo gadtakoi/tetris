@@ -30,6 +30,9 @@ class FakeGame:
     def step_down(self):
         self.calls.append("down")
 
+    def hard_drop(self):
+        self.calls.append("hard_drop")
+
     def new_game(self):
         self.calls.append("new_game")
         self.is_over = False
@@ -151,6 +154,30 @@ def test_hold_soft_drop(controller, game):
     assert game.calls == ["down"] * 3
 
 
+def test_space_hard_drops_once(controller, game):
+    controller.key_down(Key.HARD_DROP)
+    assert game.calls == ["hard_drop"]
+
+
+def test_holding_space_does_not_repeat(controller, game):
+    controller.key_down(Key.HARD_DROP)
+    frames(controller, 1000)
+    controller.key_up(Key.HARD_DROP)
+    assert game.calls == ["hard_drop"]
+
+
+def test_space_on_pause_does_nothing(controller, game):
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.HARD_DROP)
+    assert game.calls == []
+
+
+def test_space_after_game_over_does_nothing(controller, game):
+    game.is_over = True
+    controller.key_down(Key.HARD_DROP)
+    assert game.calls == []
+
+
 def test_rotation_does_not_repeat(controller, game):
     controller.key_down(Key.ROTATE_CW)
     frames(controller, 1000)
@@ -209,7 +236,7 @@ def test_enter_during_play_does_nothing(controller, game):
 
 def test_game_over_ignores_keys_and_time(controller, game):
     game.is_over = True
-    for key in (Key.LEFT, Key.RIGHT, Key.DOWN, Key.ROTATE_CW, Key.ROTATE_CCW):
+    for key in (Key.LEFT, Key.RIGHT, Key.DOWN, Key.HARD_DROP, Key.ROTATE_CW, Key.ROTATE_CCW):
         controller.key_down(key)
     controller.update(16)
     assert game.calls == []

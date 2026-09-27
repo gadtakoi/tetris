@@ -43,6 +43,12 @@ CELL_OUTLINE: Color = (20, 20, 20)
 OVERLAY_ALPHA = 160
 
 
+def ghost_color(piece_type: PieceType) -> Color:
+    """The piece color dimmed four times, used for the drop shadow."""
+    r, g, b = PIECE_COLORS[piece_type]
+    return r // 4, g // 4, b // 4
+
+
 def cell_rect(col: int, row: int) -> Rect:
     """Pixel rect (x, y, w, h) of a visible board cell (rows 2-21)."""
     if not (0 <= col < WIDTH and HIDDEN_ROWS <= row < HEIGHT):

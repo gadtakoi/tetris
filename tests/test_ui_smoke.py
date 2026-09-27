@@ -43,13 +43,21 @@ def game_with_hidden_active_piece() -> Game:
     return game
 
 
+def assert_only_ghost_on_field(surface: pygame.Surface, game: Game) -> None:
+    """Every visible cell shows the field background, except the active piece's ghost."""
+    ghost = set(game.ghost_cells())
+    assert ghost  # the hidden piece still casts a shadow onto the floor
+    for cell in VISIBLE_CELLS:
+        expected = layout.ghost_color(game.active.type) if cell in ghost else layout.FIELD_BG
+        assert center_color(surface, layout.cell_rect(*cell)) == expected
+
+
 # --- Rendering -------------------------------------------------------------
 
 
 def test_empty_field():
-    surface = draw_game(game_with_hidden_active_piece())
-    for cell in VISIBLE_CELLS:
-        assert center_color(surface, layout.cell_rect(*cell)) == layout.FIELD_BG
+    game = game_with_hidden_active_piece()
+    assert_only_ghost_on_field(draw_game(game), game)
 
 
 def test_locked_cell_color():
@@ -62,9 +70,7 @@ def test_locked_cell_color():
 def test_hidden_rows_are_not_drawn():
     game = game_with_hidden_active_piece()
     game.board.place([(0, 1)], PieceType.S)
-    surface = draw_game(game)
-    for cell in VISIBLE_CELLS:
-        assert center_color(surface, layout.cell_rect(*cell)) == layout.FIELD_BG
+    assert_only_ghost_on_field(draw_game(game), game)
 
 
 def test_active_piece_color():
@@ -89,6 +95,33 @@ def test_next_piece_preview():
         ]
         # I in orientation 0 fills box row 1 only.
         assert (colors == [cyan] * 4) == (row == 1)
+
+
+def test_ghost_of_t_piece():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    surface = draw_game(game)
+    assert layout.ghost_color(PieceType.T) == (40, 0, 60)
+    for cell in [(4, 20), (3, 21), (4, 21), (5, 21)]:
+        assert center_color(surface, layout.cell_rect(*cell)) == (40, 0, 60)
+
+
+def test_piece_on_floor_covers_its_ghost():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    for _ in range(18):
+        game.step_down()
+    surface = draw_game(game)
+    for cell in game.active.cells():
+        assert center_color(surface, layout.cell_rect(*cell)) == (160, 0, 240)
+
+
+def test_no_ghost_after_game_over():
+    game = Game(rng=ScriptedRng([PieceType.O]))
+    while not game.is_over:
+        game.hard_drop()
+    surface = draw_game(game)
+    ghost_colors = {layout.ghost_color(t) for t in PieceType}
+    for cell in VISIBLE_CELLS:
+        assert center_color(surface, layout.cell_rect(*cell)) not in ghost_colors
 
 
 def test_game_over_hides_active_piece_and_shades_field():
@@ -137,6 +170,7 @@ def test_quit_event_ends_main_early():
         (pygame.K_LEFT, Key.LEFT),
         (pygame.K_RIGHT, Key.RIGHT),
         (pygame.K_DOWN, Key.DOWN),
+        (pygame.K_SPACE, Key.HARD_DROP),
         (pygame.K_UP, Key.ROTATE_CW),
         (pygame.K_x, Key.ROTATE_CW),
         (pygame.K_z, Key.ROTATE_CCW),

@@ -258,6 +258,100 @@ def test_rows_cleared_before_next_piece_spawns():
     assert occupied(game) == {(9, 2), (9, 3), (9, 4), (9, 5)}
 
 
+# --- Ghost and hard drop --------------------------------------------------
+
+T_ON_FLOOR = {(4, 20), (3, 21), (4, 21), (5, 21)}
+T_ON_CELL_4_15 = {(4, 13), (3, 14), (4, 14), (5, 14)}
+
+
+def finished_game() -> Game:
+    game = make_game(PieceType.O)
+    while not game.is_over:
+        drop_to_bottom(game)
+    return game
+
+
+def test_ghost_on_empty_board():
+    game = make_game(PieceType.T, PieceType.T)
+    assert set(game.ghost_cells()) == T_ON_FLOOR
+
+
+def test_ghost_above_occupied_cell():
+    game = make_game(PieceType.T, PieceType.T)
+    game.board.place([(4, 15)], PieceType.Z)
+    assert set(game.ghost_cells()) == T_ON_CELL_4_15
+
+
+def test_ghost_follows_the_piece():
+    game = make_game(PieceType.T, PieceType.T)
+    assert game.move_left()
+    assert set(game.ghost_cells()) == {(3, 20), (2, 21), (3, 21), (4, 21)}
+
+
+def test_ghost_of_piece_on_floor_is_the_piece():
+    game = make_game(PieceType.T, PieceType.T)
+    for _ in range(18):
+        assert game.step_down() is StepResult.MOVED
+    assert set(game.ghost_cells()) == set(game.active.cells()) == T_ON_FLOOR
+
+
+def test_no_ghost_after_game_over():
+    assert finished_game().ghost_cells() == ()
+
+
+def test_hard_drop_on_empty_board():
+    game = make_game(PieceType.T, PieceType.S)
+    assert game.hard_drop() is StepResult.LOCKED
+    assert occupied(game) == T_ON_FLOOR
+    assert all(game.board.get(c, r) is PieceType.T for c, r in T_ON_FLOOR)
+    assert game.active == ActivePiece.spawn(PieceType.S)
+
+
+def test_hard_drop_onto_occupied_cell():
+    game = make_game(PieceType.T, PieceType.S)
+    game.board.place([(4, 15)], PieceType.Z)
+    assert game.hard_drop() is StepResult.LOCKED
+    assert occupied(game) == T_ON_CELL_4_15 | {(4, 15)}
+
+
+def test_hard_drop_clears_a_row():
+    game = make_game(PieceType.O, PieceType.T)
+    fill_rows(game, range(21, 22), range(8))
+    for _ in range(4):
+        assert game.move_right()
+    assert game.hard_drop() is StepResult.LOCKED
+    assert game.score == 40
+    assert occupied(game) == {(8, 21), (9, 21)}
+
+
+def test_hard_drop_after_game_over_is_rejected():
+    game = finished_game()
+    before = (occupied(game), game.active, game.next_type, game.score)
+    assert game.hard_drop() is StepResult.REJECTED
+    assert (occupied(game), game.active, game.next_type, game.score) == before
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_hard_drop_locks_where_the_ghost_is(seed):
+    game = Game(seed=seed)
+    commands = [game.move_left, game.move_right, game.rotate_cw, game.rotate_ccw]
+    actions = random.Random(3000 + seed)
+    checked = 0
+    for _ in range(60):
+        if game.is_over:
+            break
+        for _ in range(actions.randint(0, 6)):
+            actions.choice(commands)()
+        ghost, piece_type = set(game.ghost_cells()), game.active.type
+        before = occupied(game)
+        game.hard_drop()
+        if game.last_cleared == 0:
+            assert occupied(game) == before | ghost
+            assert all(game.board.get(c, r) is piece_type for c, r in ghost)
+            checked += 1
+    assert checked > 0
+
+
 # --- Gravity ---------------------------------------------------------------
 
 T_SPAWN_CELLS = {(4, 2), (3, 3), (4, 3), (5, 3)}

@@ -15,6 +15,7 @@ class Key(Enum):
     LEFT = "left"
     RIGHT = "right"
     DOWN = "down"
+    HARD_DROP = "hard_drop"
     ROTATE_CW = "rotate_cw"
     ROTATE_CCW = "rotate_ccw"
     PAUSE = "pause"
@@ -29,6 +30,7 @@ class GameLike(Protocol):
     def rotate_cw(self) -> object: ...
     def rotate_ccw(self) -> object: ...
     def step_down(self) -> object: ...
+    def hard_drop(self) -> object: ...
     def tick(self, dt_ms: int) -> None: ...
     def new_game(self) -> None: ...
 
@@ -102,6 +104,8 @@ class Controller:
         elif key is Key.DOWN:
             self._drop.press()
             self.game.step_down()
+        elif key is Key.HARD_DROP:
+            self.game.hard_drop()
         elif key is Key.ROTATE_CW:
             self.game.rotate_cw()
         elif key is Key.ROTATE_CCW:

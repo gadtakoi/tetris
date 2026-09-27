@@ -33,6 +33,11 @@ def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
             if piece_type is not None:
                 _draw_cell(surface, layout.cell_rect(col, row), piece_type)
     if not game.is_over:
+        # The ghost goes first so the active piece covers it where they overlap.
+        ghost = layout.ghost_color(game.active.type)
+        for col, row in game.ghost_cells():
+            if row >= HIDDEN_ROWS:
+                _fill_cell(surface, layout.cell_rect(col, row), ghost)
         for col, row in game.active.cells():
             if row >= HIDDEN_ROWS:
                 _draw_cell(surface, layout.cell_rect(col, row), game.active.type)
@@ -57,7 +62,11 @@ def _draw_field(surface: pygame.Surface) -> None:
 
 
 def _draw_cell(surface: pygame.Surface, rect: layout.Rect, piece_type: PieceType) -> None:
-    surface.fill(layout.PIECE_COLORS[piece_type], rect)
+    _fill_cell(surface, rect, layout.PIECE_COLORS[piece_type])
+
+
+def _fill_cell(surface: pygame.Surface, rect: layout.Rect, color: layout.Color) -> None:
+    surface.fill(color, rect)
     pygame.draw.rect(surface, layout.CELL_OUTLINE, rect, width=1)
 
 

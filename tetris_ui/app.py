@@ -12,6 +12,7 @@ KEY_MAP: dict[int, Key] = {
     pygame.K_LEFT: Key.LEFT,
     pygame.K_RIGHT: Key.RIGHT,
     pygame.K_DOWN: Key.DOWN,
+    pygame.K_SPACE: Key.HARD_DROP,
     pygame.K_UP: Key.ROTATE_CW,
     pygame.K_x: Key.ROTATE_CW,
     pygame.K_z: Key.ROTATE_CCW,

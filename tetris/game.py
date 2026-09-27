@@ -1,4 +1,4 @@
-"""Game state and piece control: moves, rotation, gravity, locking, scoring and game over."""
+"""Game state and piece control: moves, rotation, drops, gravity, locking, scoring and game over."""
 
 from __future__ import annotations
 
@@ -77,6 +77,20 @@ class Game:
             self._gravity_time = 0  # a player's drop restarts the gravity interval
         return result
 
+    def hard_drop(self) -> StepResult:
+        """Drop the active piece straight to the lowest valid row and lock it."""
+        if self.is_over:
+            return StepResult.REJECTED
+        self.active = self._dropped()
+        self._lock()
+        return StepResult.LOCKED
+
+    def ghost_cells(self) -> tuple[Cell, ...]:
+        """Cells where the active piece would lock if dropped straight down."""
+        if self.is_over:
+            return ()
+        return self._dropped().cells()
+
     def tick(self, dt_ms: int) -> None:
         """Advance time by dt_ms milliseconds, applying gravity steps as they fall due."""
         if dt_ms < 0:
@@ -101,6 +115,13 @@ class Game:
             return StepResult.MOVED
         self._lock()
         return StepResult.LOCKED
+
+    def _dropped(self) -> ActivePiece:
+        """The active piece moved straight down as far as it fits."""
+        piece = self.active
+        while self._fits(below := replace(piece, row=piece.row + 1)):
+            piece = below
+        return piece
 
     def _rotate(self, delta: int) -> bool:
         rotation = (self.active.rotation + delta) % ROTATION_COUNT
