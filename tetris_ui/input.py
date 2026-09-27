@@ -1,5 +1,6 @@
-"""Keyboard input rules without pygame: the splash and help screens, auto-repeat,
-pause, frame time, name entry, restart, sound settings and each frame's sound events."""
+"""Keyboard input rules without pygame: the main menu and its screens, the help screen,
+auto-repeat, the pause menu, frame time, name entry, restart, settings and each frame's
+sound events."""
 
 from __future__ import annotations
 
@@ -9,10 +10,9 @@ from enum import Enum
 from typing import Protocol
 
 from tetris.highscores import Entry, HighScores, append_to_name, final_name
+from tetris_ui import menus
 from tetris_ui.settings import Settings
 
-SHIFT_DELAY_MS = 170
-SHIFT_INTERVAL_MS = 50
 SOFT_DROP_INTERVAL_MS = 50
 MAX_FRAME_MS = 100
 
@@ -22,13 +22,15 @@ class Key(Enum):
 
     LEFT = "left"
     RIGHT = "right"
+    UP = "up"  # rotates clockwise during play, moves the selection in menus
     DOWN = "down"
     HARD_DROP = "hard_drop"
     HOLD = "hold"
     ROTATE_CW = "rotate_cw"
     ROTATE_CCW = "rotate_ccw"
     PAUSE = "pause"
-    RESTART = "restart"
+    ESCAPE = "escape"  # pauses during play, goes back in menus
+    RESTART = "restart"  # Enter
     BACKSPACE = "backspace"
     TOGGLE_MUSIC = "toggle_music"
     TOGGLE_SOUND = "toggle_sound"
@@ -64,12 +66,20 @@ class Sound(Enum):
 
 
 class Phase(Enum):
-    """What the screen is for: the start screen, a game in progress, or after game over."""
+    """What the screen is for: the main menu or one of its screens, a game in progress,
+    or after game over."""
 
-    SPLASH = "splash"  # the start screen with the key list, Enter starts the game
+    MENU = "menu"  # the main menu shown at launch
+    SCORES = "scores"  # the high score table opened from the menu
+    SETTINGS = "settings"  # the settings screen
+    CONTROLS = "controls"  # the key list opened from the menu
     PLAYING = "playing"
     NAME_ENTRY = "name_entry"  # the result made the high score table
-    TABLE = "table"  # showing the table, Enter starts a new game
+    TABLE = "table"  # showing the table, Enter starts a new game, Esc opens the menu
+
+
+# The main menu and the screens opened from it; the game stands still on all of them.
+MENU_PHASES = (Phase.MENU, Phase.SCORES, Phase.SETTINGS, Phase.CONTROLS)
 
 
 class GameLike(Protocol):
@@ -105,8 +115,8 @@ class GameLike(Protocol):
     def tick(self, dt_ms: int) -> None:
         """Let dt_ms milliseconds of gravity pass."""
 
-    def new_game(self) -> None:
-        """Start a new game."""
+    def new_game(self, start_level: int = 0) -> None:
+        """Start a new game at start_level."""
 
 
 class KeyRepeater:
@@ -150,9 +160,9 @@ class Controller:
     """Turns key presses and frame time into commands on the game.
 
     `scores` is the high score table, and `on_save` is called with it after a new
-    record is entered. `settings` are the sound settings, and `on_settings_change` is
-    called with the new settings after every change. With `splash=True` the controller
-    starts on the splash screen instead of in a running game.
+    record is entered. `settings` are the player's settings, and `on_settings_change` is
+    called with the new settings after every change. With `start_in_menu=True` the
+    controller starts in the main menu instead of in a running game.
     """
 
     def __init__(
@@ -162,7 +172,7 @@ class Controller:
         on_save: Callable[[HighScores], object] | None = None,
         settings: Settings | None = None,
         on_settings_change: Callable[[Settings], object] | None = None,
-        splash: bool = False,
+        start_in_menu: bool = False,
     ) -> None:
         self.game = game
         self.scores = scores if scores is not None else HighScores()
@@ -173,11 +183,15 @@ class Controller:
         self.help_open = False  # the key list opened with F1; the game stays paused under it
         self.name = ""  # the name being typed in NAME_ENTRY
         self.highlight: int | None = None  # table place of this game's result
-        self._phase = Phase.SPLASH if splash else Phase.PLAYING
+        self.menu_index = 0  # selected item of menus.MAIN_ITEMS
+        self.pause_index = 0  # selected item of menus.PAUSE_ITEMS
+        self.settings_index = 0  # selected settings row; the last one is Back
+        self.quit_requested = False  # Quit was chosen in the main menu
+        self._phase = Phase.MENU if start_in_menu else Phase.PLAYING
         # Grows whenever the music must start over (new game, music switched on).
         self.music_generation = 0
         self._sounds: dict[Sound, None] = {}  # this frame's sounds, ordered, no repeats
-        self._shift = KeyRepeater(SHIFT_DELAY_MS, SHIFT_INTERVAL_MS)
+        self._shift = self._make_shift_repeater()
         self._shift_key: Key | None = None  # the horizontal key that repeats
         self._drop = KeyRepeater(SOFT_DROP_INTERVAL_MS, SOFT_DROP_INTERVAL_MS)
 
@@ -223,17 +237,18 @@ class Controller:
     def key_down(self, key: Key) -> None:
         """Handle a key press according to the current phase.
 
-        Sound settings keys work everywhere except during name entry. The splash waits for
-        Enter; the help screen closes on F1, Esc, P or Enter; during play the key moves,
-        rotates or drops the piece, pauses or opens the help screen.
+        Sound settings keys work everywhere except during name entry. The menu and its
+        screens are handled by _menu_key(); after game over Enter starts a new game and
+        Esc opens the menu; the help screen closes on F1, Esc, P or Enter; the pause menu
+        takes Up, Down and Enter; during play the key moves, rotates or drops the piece,
+        pauses or opens the help screen.
         """
         phase = self.phase
         if key in SETTINGS_KEYS and phase is not Phase.NAME_ENTRY:
             self._change_settings(key)
             return
-        if phase is Phase.SPLASH:
-            if key is Key.RESTART:
-                self._phase = Phase.PLAYING
+        if phase in MENU_PHASES:
+            self._menu_key(phase, key)
             return
         if phase is Phase.NAME_ENTRY:
             if key is Key.RESTART:
@@ -243,13 +258,12 @@ class Controller:
             return
         if phase is Phase.TABLE:
             if key is Key.RESTART:
-                self.game.new_game()
-                self.highlight = None
-                self._phase = Phase.PLAYING
-                self.music_generation += 1
+                self._start_game()
+            elif key is Key.ESCAPE:
+                self._open_menu()
             return
         if self.help_open:
-            if key in (Key.HELP, Key.PAUSE, Key.RESTART):
+            if key in (Key.HELP, Key.PAUSE, Key.ESCAPE, Key.RESTART):
                 self.help_open = False
                 self.paused = False
                 self._release_all()
@@ -259,12 +273,16 @@ class Controller:
             self.paused = True
             self._release_all()
             return
-        if key is Key.PAUSE:
+        if key in (Key.PAUSE, Key.ESCAPE):
             self.paused = not self.paused
+            self.pause_index = 0
             self._release_all()
             return
-        if not self.playing:
+        if self.paused:
+            self._pause_key(key)
             return
+        if key is Key.UP:
+            key = Key.ROTATE_CW
         before = self._snapshot()
         if key in (Key.LEFT, Key.RIGHT):
             self._shift_key = key
@@ -320,8 +338,82 @@ class Controller:
         elif self._shift_key is Key.RIGHT:
             self._sound_if(self.game.move_right(), Sound.MOVE)
 
+    def _menu_key(self, phase: Phase, key: Key) -> None:
+        """Handle a key in the main menu or on one of its screens."""
+        if phase is Phase.MENU:
+            if key in (Key.UP, Key.DOWN):
+                step = -1 if key is Key.UP else 1
+                self.menu_index = (self.menu_index + step) % len(menus.MAIN_ITEMS)
+            elif key is Key.RESTART:
+                self._choose(menus.MAIN_ITEMS[self.menu_index])
+        elif phase is Phase.SETTINGS:
+            self._settings_key(key)
+        elif key in (Key.RESTART, Key.ESCAPE):  # the high scores and the key list
+            self._open_menu()
+
+    def _choose(self, item: str) -> None:
+        """Do what the chosen main menu item stands for."""
+        if item == menus.NEW_GAME:
+            self._start_game()
+        elif item == menus.HIGH_SCORES:
+            self._phase = Phase.SCORES
+        elif item == menus.SETTINGS:
+            self.settings_index = 0
+            self._phase = Phase.SETTINGS
+        elif item == menus.CONTROLS:
+            self._phase = Phase.CONTROLS
+        elif item == menus.QUIT:
+            self.quit_requested = True
+
+    def _settings_key(self, key: Key) -> None:
+        """Handle a key on the settings screen: choose a row, change it or go back."""
+        on_back = self.settings_index == len(menus.SETTING_ROWS)
+        if key in (Key.UP, Key.DOWN):
+            step = -1 if key is Key.UP else 1
+            self.settings_index = (self.settings_index + step) % menus.SETTINGS_ROW_COUNT
+        elif key is Key.ESCAPE or (key is Key.RESTART and on_back):
+            self._open_menu()
+        elif key in (Key.LEFT, Key.RIGHT, Key.RESTART) and not on_back:
+            row = menus.SETTING_ROWS[self.settings_index]
+            steps = -1 if key is Key.LEFT else 1
+            self._apply_settings(menus.step_setting(self.settings, row, steps))
+
+    def _pause_key(self, key: Key) -> None:
+        """Handle a key in the pause menu: choose Continue or Main menu."""
+        if key in (Key.UP, Key.DOWN):
+            step = -1 if key is Key.UP else 1
+            self.pause_index = (self.pause_index + step) % len(menus.PAUSE_ITEMS)
+        elif key is Key.RESTART:
+            if menus.PAUSE_ITEMS[self.pause_index] == menus.CONTINUE:
+                self.paused = False
+            else:
+                self._open_menu()  # the unfinished game is dropped, nothing is recorded
+
+    def _start_game(self) -> None:
+        """Start a new game at the chosen start level; the music starts over."""
+        self.game.new_game(self.settings.start_level)
+        self.highlight = None
+        self.paused = False
+        self.help_open = False
+        self._release_all()
+        self._phase = Phase.PLAYING
+        self.music_generation += 1
+
+    def _open_menu(self) -> None:
+        """Show the main menu with New game selected."""
+        self.menu_index = 0
+        self.highlight = None
+        self.paused = False
+        self.help_open = False
+        self._release_all()
+        self._phase = Phase.MENU
+
+    def _make_shift_repeater(self) -> KeyRepeater:
+        """A repeater for Left and Right with the delay and interval of the chosen speed."""
+        return KeyRepeater(*menus.AUTOREPEAT[self.settings.autorepeat])
+
     def _change_settings(self, key: Key) -> None:
-        """Apply a sound settings key and report the new settings if they changed."""
+        """Apply a sound settings key."""
         old = self.settings
         if key is Key.TOGGLE_SOUND:
             new = replace(old, sound_on=not old.sound_on)
@@ -335,11 +427,19 @@ class Controller:
             new = old.with_sfx_volume_step(-1)
         else:
             new = old.with_volume_step(-1)
+        self._apply_settings(new)
+
+    def _apply_settings(self, new: Settings) -> None:
+        """Switch to new settings and report them, if they differ from the current ones."""
+        old = self.settings
         if new == old:
             return
         self.settings = new
         if new.music_on and not old.music_on:
             self.music_generation += 1  # switching music on starts it over
+        if new.autorepeat != old.autorepeat:
+            self._shift = self._make_shift_repeater()
+            self._shift_key = None
         if self._on_settings_change is not None:
             self._on_settings_change(new)
 

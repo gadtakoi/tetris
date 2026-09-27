@@ -17,12 +17,12 @@ KEY_MAP: dict[int, Key] = {
     pygame.K_c: Key.HOLD,
     pygame.K_LSHIFT: Key.HOLD,
     pygame.K_RSHIFT: Key.HOLD,
-    pygame.K_UP: Key.ROTATE_CW,
+    pygame.K_UP: Key.UP,
     pygame.K_x: Key.ROTATE_CW,
     pygame.K_z: Key.ROTATE_CCW,
     pygame.K_LCTRL: Key.ROTATE_CCW,
     pygame.K_p: Key.PAUSE,
-    pygame.K_ESCAPE: Key.PAUSE,
+    pygame.K_ESCAPE: Key.ESCAPE,
     pygame.K_RETURN: Key.RESTART,
     pygame.K_KP_ENTER: Key.RESTART,
     pygame.K_BACKSPACE: Key.BACKSPACE,
@@ -49,8 +49,8 @@ def create_window() -> pygame.Surface:
 
 
 def create_controller() -> Controller:
-    """A controller that starts on the splash screen, with the saved high scores and
-    sound settings; every change to them is written back to the data folder.
+    """A controller that starts in the main menu, with the saved high scores and
+    settings; every change to them is written back to the data folder.
     """
     scores_path = storage.high_scores_path()
     settings_path = storage.settings_path()
@@ -60,7 +60,7 @@ def create_controller() -> Controller:
         on_save=lambda scores: storage.save(scores, scores_path),
         settings=storage.load_settings(settings_path),
         on_settings_change=lambda settings: storage.save_settings(settings, settings_path),
-        splash=True,
+        start_in_menu=True,
     )
 
 
@@ -81,7 +81,8 @@ def handle_event(event: pygame.event.Event, controller: Controller) -> bool:
 
 
 def main(max_frames: int | None = None) -> int:
-    """Run the game until the window is closed; max_frames is for tests only."""
+    """Run the game until the window is closed or Quit is chosen; max_frames is for
+    tests only."""
     pygame.init()
     try:
         screen = create_window()
@@ -94,7 +95,7 @@ def main(max_frames: int | None = None) -> int:
         while max_frames is None or frames < max_frames:
             frame_ms = clock.tick(layout.FPS)
             for event in pygame.event.get():
-                if not handle_event(event, controller):
+                if not handle_event(event, controller) or controller.quit_requested:
                     return 0
             controller.update(frame_ms)
             audio.sync(controller)

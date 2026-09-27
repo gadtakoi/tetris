@@ -869,3 +869,40 @@ def test_gravity_alone_ends_the_game():
         game.tick(16)
         assert_consistent(game)
     assert game.is_over
+
+
+# --- Start level -----------------------------------------------------------
+
+
+def test_new_game_from_start_level():
+    game = Game(seed=1)
+    game.score, game.lines = 1500, 12
+    game.new_game(5)
+    assert (game.score, game.lines, game.level, game.last_cleared) == (0, 0, 5, 0)
+
+
+def test_new_game_defaults_to_level_0():
+    game = Game(seed=1)
+    game.new_game(5)
+    game.new_game()
+    assert game.level == 0
+
+
+def test_start_level_5_holds_until_60_lines():
+    game = make_game(PieceType.O)  # every piece is an O, also after new_game()
+    game.new_game(5)
+    game.lines = 58
+    clear_single_row_with_o(game)
+    assert (game.lines, game.level) == (59, 5)
+    clear_single_row_with_o(game)
+    assert (game.lines, game.level) == (60, 6)
+
+
+def test_start_level_sets_the_gravity():
+    game = make_game(PieceType.T)
+    game.new_game(5)
+    row = game.active.row
+    game.tick(383)  # level 5 is 23 frames per row: 383.3 ms
+    assert game.active.row == row
+    game.tick(1)
+    assert game.active.row == row + 1

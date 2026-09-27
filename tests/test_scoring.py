@@ -34,3 +34,8 @@ def test_impossible_line_count_is_rejected(lines):
 )
 def test_level_for(total_lines, level):
     assert level_for(total_lines) == level
+
+
+@pytest.mark.parametrize(("total_lines", "level"), [(0, 5), (59, 5), (60, 6), (75, 7)])
+def test_level_for_start_level_5(total_lines, level):
+    assert level_for(total_lines, 5) == level

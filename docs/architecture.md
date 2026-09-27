@@ -7,7 +7,7 @@
 - **`tetris/` — логика игры.** Поле, фигуры, команды, очки, уровни, гравитация, правила таблицы рекордов. Чистый Python: без pygame, без файлов и без системных часов. Время приходит только через `Game.tick(dt_ms)`, случайность — через передаваемый `random.Random`. Поэтому логика детерминирована и полностью проверяется тестами. Тест [tests/test_architecture.py](../tests/test_architecture.py) следит, чтобы pygame сюда не попал.
 - **`tetris_ui/` — интерфейс.** Окно, клавиатура, отрисовка, звук, хранение рекордов и настроек. Он только читает состояние логики и передаёт ей команды; правил игры в нём нет.
 
-Внутри `tetris_ui/` тоже есть граница: модули `input`, `layout`, `settings`, `synth`, `music` не импортируют pygame и тестируются напрямую, а `app`, `render`, `audio` работают с pygame и проверяются дымовыми тестами с SDL-драйверами `dummy` (без окна и без звуковой карты).
+Внутри `tetris_ui/` тоже есть граница: модули `input`, `menus`, `layout`, `settings`, `synth`, `music` не импортируют pygame и тестируются напрямую, а `app`, `render`, `audio` работают с pygame и проверяются дымовыми тестами с SDL-драйверами `dummy` (без окна и без звуковой карты).
 
 ## Зависимости модулей
 
@@ -18,7 +18,9 @@ flowchart TB
         cli -.->|"после разбора аргументов"| app
         app --> input & render & audio & storage & layout
         render --> layout & input
-        layout --> input
+        layout --> input & menus
+        input --> menus
+        menus --> settings
         audio --> synth & music & input
         music --> synth
         storage --> settings & cli
@@ -47,14 +49,15 @@ flowchart TB
 | `tetris/pieces.py` | Семь фигур, их ориентации, размеры рамок и позиции появления |
 | `tetris/randomizer.py` | Генератор 7-bag: мешки по семь фигур |
 | `tetris/game.py` | Партия: активная и следующая фигуры, команды, тень, фиксация, очки, гравитация, конец игры |
-| `tetris/scoring.py` | Таблица очков за линии и расчёт уровня |
+| `tetris/scoring.py` | Таблица очков за линии и расчёт уровня с учётом стартового |
 | `tetris/gravity.py` | Таблица скоростей: кадров на строку по уровню |
 | `tetris/highscores.py` | Правила таблицы рекордов: порядок, попадание, имя, JSON |
-| `tetris_ui/input.py` | `Controller`: фазы экрана, клавиши, автоповтор, пауза, экран клавиш, ввод имени, настройки звука, звуковые события кадра |
+| `tetris_ui/input.py` | `Controller`: фазы экрана, клавиши, главное меню и его экраны, автоповтор, меню паузы, экран клавиш, ввод имени, настройки, звуковые события кадра |
+| `tetris_ui/menus.py` | Пункты главного меню и меню паузы, строки экрана настроек, правила изменения настроек, предустановки автоповтора (без pygame) |
 | `tetris_ui/layout.py` | Размеры, координаты и цвета, все надписи экрана (без pygame) |
 | `tetris_ui/render.py` | Рисование кадра на поверхности pygame |
 | `tetris_ui/app.py` | Окно, игровой цикл, перевод клавиш pygame в `Key`, сборка контроллера |
-| `tetris_ui/settings.py` | Настройки звука: значения по умолчанию, проверка, JSON |
+| `tetris_ui/settings.py` | Настройки игрока (звук, язык, стартовый уровень, тень, автоповтор): значения по умолчанию, проверка, JSON |
 | `tetris_ui/storage.py` | Папка данных, чтение и атомарная запись `highscores.json` и `settings.json` |
 | `tetris_ui/synth.py` | Синтезатор PCM на чистом Python и семь звуковых эффектов |
 | `tetris_ui/music.py` | Ноты фоновой мелодии и её синтез |
@@ -86,7 +89,7 @@ sequenceDiagram
     App->>App: display.flip()
 ```
 
-Порядок важен: команды игрока выполняются до гравитации того же кадра, а время одного кадра ограничено 100 мс, чтобы после подвисания окна фигура не проваливалась на много строк сразу. Закрытие окна (`QUIT`) сразу завершает цикл с кодом 0.
+Порядок важен: команды игрока выполняются до гравитации того же кадра, а время одного кадра ограничено 100 мс, чтобы после подвисания окна фигура не проваливалась на много строк сразу. Закрытие окна (`QUIT`) и пункт «Quit» главного меню (`Controller.quit_requested`) сразу завершают цикл с кодом 0.
 
 ## Фазы экрана
 
@@ -94,29 +97,41 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> SPLASH
-    SPLASH --> PLAYING: Enter
+    [*] --> MENU
+    MENU --> PLAYING: New game
+    MENU --> SCORES: High scores
+    MENU --> SETTINGS: Settings
+    MENU --> CONTROLS: Controls
+    MENU --> [*]: Quit
+    SCORES --> MENU: Enter / Esc
+    CONTROLS --> MENU: Enter / Esc
+    SETTINGS --> MENU: Back / Esc
     state PLAYING {
         state "Партия идёт" as Running
-        state "Пауза" as Paused
+        state "Меню паузы" as Paused
         state "Экран клавиш" as Help
         [*] --> Running
         Running --> Paused: P / Esc
-        Paused --> Running: P / Esc
+        Paused --> Running: P / Esc / Continue
         Running --> Help: F1
         Paused --> Help: F1
         Help --> Running: F1 / Esc / P / Enter
     }
+    PLAYING --> MENU: Main menu на паузе
     PLAYING --> NAME_ENTRY: конец игры, результат в топ-10
     PLAYING --> TABLE: конец игры, результат не в топ-10
     NAME_ENTRY --> TABLE: Enter
     TABLE --> PLAYING: Enter (новая партия)
+    TABLE --> MENU: Esc
 ```
 
-- **`SPLASH`** — заставка со списком клавиш при запуске; время не идёт, музыки нет.
-- **`PLAYING`** — партия. Пауза (`paused`) и экран клавиш (`help_open`) — состояния внутри неё: время и команды стоят, музыка на паузе.
+- **`MENU`** — главное меню при запуске: New game, High scores, Settings, Controls, Quit. Выделенный пункт — `menu_index`.
+- **`SCORES`, `SETTINGS`, `CONTROLS`** — экраны меню: таблица рекордов, настройки, список клавиш. В меню и на его экранах время не идёт, музыки нет, работают только клавиши экрана и клавиши звука.
+- **`PLAYING`** — партия. Пауза (`paused`) и экран клавиш (`help_open`) — состояния внутри неё: время и команды стоят, музыка на паузе. На паузе работает меню паузы (`pause_index`): «Main menu» бросает партию без записи результата.
 - **`NAME_ENTRY`** — ввод имени для таблицы рекордов.
-- **`TABLE`** — таблица рекордов; Enter начинает новую партию сразу, без заставки.
+- **`TABLE`** — таблица рекордов; Enter начинает новую партию сразу, Esc открывает главное меню.
+
+Новая партия всегда начинается со стартового уровня из настроек: `game.new_game(settings.start_level)`.
 
 Переход из `PLAYING` при конце игры происходит в свойстве `Controller.phase`, как только `game.is_over` стал истинным.
 
@@ -134,8 +149,8 @@ stateDiagram-v2
 | Windows | `%APPDATA%\tetris` |
 | иначе | `~/.local/share/tetris` |
 
-В ней два файла: `highscores.json` (таблица рекордов) и `settings.json` (настройки звука). Оба пишутся атомарно — во временный файл и затем заменой — и при повреждении читаются как пустая таблица и настройки по умолчанию. Рядом с exe игра ничего не создаёт.
+В ней два файла: `highscores.json` (таблица рекордов) и `settings.json` (настройки звука и игры). Оба пишутся атомарно — во временный файл и затем заменой — и при повреждении читаются как пустая таблица и настройки по умолчанию. Рядом с exe игра ничего не создаёт.
 
 ## Нормативные спецификации
 
-Поведение, описанное здесь в общих чертах, точно задано в спецификациях: [game-screen](../openspec/specs/game-screen/spec.md), [controls](../openspec/specs/controls/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [distribution](../openspec/specs/distribution/spec.md).
+Поведение, описанное здесь в общих чертах, точно задано в спецификациях: [game-screen](../openspec/specs/game-screen/spec.md), [controls](../openspec/specs/controls/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [distribution](../openspec/specs/distribution/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md).

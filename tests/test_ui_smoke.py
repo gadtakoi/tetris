@@ -12,8 +12,9 @@ pygame = pytest.importorskip("pygame")
 from tests.helpers import ScriptedRng  # noqa: E402
 from tetris.board import HEIGHT, HIDDEN_ROWS, WIDTH  # noqa: E402
 from tetris.game import ActivePiece, Game  # noqa: E402
+from tetris.highscores import Entry, HighScores  # noqa: E402
 from tetris.pieces import PieceType  # noqa: E402
-from tetris_ui import app, layout, render  # noqa: E402
+from tetris_ui import app, layout, menus, render  # noqa: E402
 from tetris_ui.input import Controller, Key, Phase  # noqa: E402
 from tetris_ui.settings import Settings  # noqa: E402
 
@@ -176,6 +177,13 @@ def test_piece_on_floor_covers_its_ghost():
         assert center_color(surface, layout.cell_rect(*cell)) == (160, 0, 240)
 
 
+def test_ghost_switched_off():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    surface = draw_game(game, Controller(game, settings=Settings(ghost=False)))
+    for cell in [(4, 20), (3, 21), (4, 21), (5, 21)]:
+        assert center_color(surface, layout.cell_rect(*cell)) == layout.FIELD_BG
+
+
 def test_no_ghost_after_game_over():
     game = Game(rng=ScriptedRng([PieceType.O]))
     while not game.is_over:
@@ -242,12 +250,12 @@ def test_quit_event_ends_main_early(data_dir):
         (pygame.K_c, Key.HOLD),
         (pygame.K_LSHIFT, Key.HOLD),
         (pygame.K_RSHIFT, Key.HOLD),
-        (pygame.K_UP, Key.ROTATE_CW),
+        (pygame.K_UP, Key.UP),
         (pygame.K_x, Key.ROTATE_CW),
         (pygame.K_z, Key.ROTATE_CCW),
         (pygame.K_LCTRL, Key.ROTATE_CCW),
         (pygame.K_p, Key.PAUSE),
-        (pygame.K_ESCAPE, Key.PAUSE),
+        (pygame.K_ESCAPE, Key.ESCAPE),
         (pygame.K_RETURN, Key.RESTART),
         (pygame.K_m, Key.TOGGLE_MUSIC),
         (pygame.K_n, Key.TOGGLE_SOUND),
@@ -325,7 +333,7 @@ def test_saved_settings_apply_after_restart(data_dir):
     )
     controller = app.create_controller()
     assert (controller.music_on, controller.sound_on, controller.music_volume) == (False, True, 30)
-    controller.key_down(Key.RESTART)  # leave the splash so the side panel is shown
+    controller.key_down(Key.RESTART)  # New game, so the side panel is shown
     assert "MUSIC OFF" in layout.screen_texts(controller)
 
 
@@ -337,34 +345,81 @@ def test_settings_change_is_saved(data_dir):
     assert app.create_controller().sound_on is False  # the next launch picks it up
 
 
-# --- Splash and help screens -----------------------------------------------
+# --- Menu, its screens and the help screen ---------------------------------
 
 
-def test_splash_covers_the_field():
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
-    controller = Controller(game, splash=True)
-    surface = draw_game(game, controller)
+def post_keys(*keys: int) -> None:
+    for key in keys:
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=key))
+
+
+def press(controller: Controller, *keys: int) -> None:
+    for key in keys:
+        app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key), controller)
+
+
+def controller_on(screen: str) -> Controller:
+    """A controller showing one of the full-window screens."""
+    table = HighScores()
+    for place in range(10):
+        table.add(Entry("Ш" * 10, 9_999_999 - place, 0, 0))
+    controller = Controller(Game(rng=ScriptedRng([PieceType.T, PieceType.S])), table,
+                            start_in_menu=True)
+    if screen == "help":
+        controller.key_down(Key.RESTART)
+        controller.key_down(Key.HELP)
+    elif screen != "menu":
+        item = {"scores": "High scores", "settings": "Settings", "controls": "Controls"}[screen]
+        while menus.MAIN_ITEMS[controller.menu_index] != item:
+            controller.key_down(Key.DOWN)
+        controller.key_down(Key.RESTART)
+    assert layout.full_screen(controller) == screen
+    return controller
+
+
+def test_menu_covers_the_field():
+    controller = controller_on("menu")
+    surface = draw_game(controller.game, controller)
     assert center_color(surface, layout.cell_rect(4, 21)) == layout.WINDOW_BG
     assert center_color(surface, layout.cell_rect(4, 2)) != layout.PIECE_COLORS[PieceType.T]
 
 
-@pytest.mark.parametrize("screen", ["splash", "help"])
-def test_key_screen_texts_fit_the_window(screen):
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
-    controller = Controller(game, splash=screen == "splash")
-    if screen == "help":
-        controller.key_down(Key.HELP)
+@pytest.mark.parametrize("screen", ["menu", "scores", "settings", "controls", "help"])
+def test_full_screen_texts_fit_the_window(screen):
+    controller = controller_on(screen)
     fonts = render.make_fonts()
     window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
-    for text, pos, role in layout.key_screen_texts(controller):
+    rects = []
+    for text, pos, role, _ in layout.full_screen_texts(controller):
         font = fonts.big if role == "title" else fonts.small
         rect = pygame.Rect((0, 0), font.size(text))
-        if role in ("title", "hint"):
-            rect.center = pos
-        else:
+        if role in ("key", "action"):
             rect.topleft = pos
+        else:
+            rect.center = pos
         assert window.contains(rect), text
-    draw_game(game, controller)  # renders without errors
+        rects.append(rect)
+    for i, rect in enumerate(rects):  # lines do not run into each other
+        assert rect.collidelist(rects[i + 1:]) == -1, i
+    draw_game(controller.game, controller)  # renders without errors
+
+
+def test_settings_values_fit_the_window():
+    settings = Settings(language="ru", music_on=False, music_volume=100, start_level=19,
+                        autorepeat="normal")
+    fonts = render.make_fonts()
+    for row in menus.SETTING_ROWS:
+        assert fonts.small.size(menus.setting_line(settings, row))[0] < layout.WINDOW_SIZE[0]
+
+
+def test_selected_menu_item_is_highlighted():
+    controller = controller_on("menu")
+    controller.key_down(Key.DOWN)
+    surface = draw_game(controller.game, controller)
+    colors = {tuple(surface.get_at((x, y)))[:3]
+              for x in range(160, 360) for y in range(layout.MENU_ITEMS_Y + 40,
+                                                        layout.MENU_ITEMS_Y + 60)}
+    assert layout.HIGHLIGHT in colors  # "High scores", the second item
 
 
 def test_key_columns_do_not_overlap():
@@ -373,10 +428,54 @@ def test_key_columns_do_not_overlap():
     assert layout.KEY_COLUMN_X + widest_key < layout.ACTION_COLUMN_X
 
 
-def test_app_starts_on_the_splash(data_dir):
+def test_pause_menu_renders():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    controller = Controller(game)
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.DOWN)
+    draw_game(game, controller)
+
+
+def test_app_starts_in_the_menu(data_dir):
     controller = app.create_controller()
-    assert controller.phase is Phase.SPLASH
-    assert layout.screen_texts(controller)[0] == "SEVA Tetris"
+    assert controller.phase is Phase.MENU
+    assert layout.screen_texts(controller)[:2] == ["SEVA Tetris", "New game"]
+    press(controller, pygame.K_RETURN)
+    assert controller.phase is Phase.PLAYING
+
+
+def test_quit_item_ends_main(data_dir):
+    post_keys(pygame.K_UP, pygame.K_RETURN)  # the selection goes round to Quit
+    start = time.monotonic()
+    assert app.main(max_frames=600) == 0  # 600 frames would take ~10 s
+    assert time.monotonic() - start < 3
+
+
+def test_game_settings_survive_a_restart(data_dir):
+    (data_dir / "settings.json").write_text(
+        '{"version": 1, "music_on": false, "sound_on": true, "music_volume": 30}',
+        encoding="utf-8",
+    )
+    controller = app.create_controller()
+    press(controller, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)  # Settings
+    for _ in range(menus.SETTING_ROWS.index("start_level")):
+        press(controller, pygame.K_DOWN)
+    press(controller, *[pygame.K_RIGHT] * 5)  # Start level: 5
+    press(controller, pygame.K_DOWN, pygame.K_RIGHT)  # Ghost: Off
+    again = app.create_controller()
+    press(again, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)
+    texts = layout.screen_texts(again)
+    assert "Start level: 5" in texts and "Ghost: Off" in texts
+    assert "Music: Off" in texts and "Music volume: 30%" in texts
+
+
+def test_broken_start_level_falls_back(data_dir):
+    (data_dir / "settings.json").write_text(
+        '{"version": 1, "music_on": false, "start_level": 25, "ghost": false}',
+        encoding="utf-8",
+    )
+    settings = app.create_controller().settings
+    assert (settings.start_level, settings.ghost, settings.music_on) == (0, False, False)
 
 
 def test_effects_volume_is_saved(data_dir):

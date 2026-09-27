@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from tetris.board import HIDDEN_ROWS, HEIGHT, VISIBLE_HEIGHT, WIDTH
 from tetris.pieces import PieceType
+from tetris_ui import menus
 from tetris_ui.input import Controller, Phase
 
 WINDOW_SIZE = (520, 640)
@@ -26,27 +27,44 @@ COUNTER_LABELS = (("SCORE", 235), ("LINES", 300), ("LEVEL", 365))
 VALUE_OFFSET_Y = 30
 MUSIC_Y, VOLUME_Y, SOUND_Y, SFX_VOLUME_Y = 470, 500, 530, 560
 
-# The key screen (splash and F1 help): hotkeys as (keys, action), all ASCII because
-# the built-in font has no arrow glyphs.
+# The key list (Controls in the menu and F1 help): hotkeys as (keys, action), all ASCII
+# because the built-in font has no arrow glyphs.
 HOTKEYS: tuple[tuple[str, str], ...] = (
     ("Left / Right", "Move"),
     ("Down", "Soft drop"),
     ("Space", "Hard drop"),
     ("Up / X", "Rotate right"),
     ("Z / Ctrl", "Rotate left"),
+    ("C / Shift", "Hold"),
     ("P / Esc", "Pause"),
     ("F1", "Help"),
     ("M", "Music on/off"),
     ("- / +", "Music volume"),
     ("N", "Sound on/off"),
-    ("Enter", "Start / restart"),
+    ("9 / 0", "Sound volume"),
+    ("Enter", "Select / new game"),
 )
-SPLASH_HINT = "Press Enter to start"
+MENU_HINT = "Up / Down - choose, Enter - select"
+RETURN_HINT = "Press Enter or Esc to return"  # high scores and Controls from the menu
 HELP_HINT = "Press F1 or Enter to return"
-KEY_SCREEN_TITLE_Y = 70  # center of the title
-KEY_TABLE_Y, KEY_TABLE_STEP = 150, 36  # top of the first row, row pitch
+SETTINGS_TITLE = "Settings"
+SETTINGS_HINT = "Left / Right - change, Esc - back"
+SCORES_TITLE = "HIGH SCORES"
+NO_RECORDS = "No records yet"
+TABLE_HINTS = ("Enter - new game", "Esc - main menu")
+PAUSE_TITLE = "PAUSE"
+
+# Full-window screens; every y is a center, except rows of the key list (top edge).
+MENU_TITLE_Y = 120
+MENU_ITEMS_Y, MENU_ITEMS_STEP = 240, 50
+SCREEN_TITLE_Y = 60  # high scores and settings
+SCORES_ROWS_Y, SCORES_ROWS_STEP = 130, 34
+SETTINGS_ROWS_Y, SETTINGS_ROWS_STEP = 130, 45
+KEY_SCREEN_TITLE_Y = 60
+KEY_TABLE_Y, KEY_TABLE_STEP = 120, 34  # top of the first row, row pitch
 KEY_COLUMN_X, ACTION_COLUMN_X = 70, 270  # left edges of the two columns
-KEY_SCREEN_HINT_Y = 590  # center of the hint
+SCREEN_HINT_Y = 590
+KEY_SCREEN_HINT_Y = 600
 
 Color = tuple[int, int, int]
 Rect = tuple[int, int, int, int]
@@ -116,18 +134,31 @@ def overlay_lines(controller: Controller) -> list[tuple[str, Color]]:
     if phase is Phase.NAME_ENTRY:
         return [("GAME OVER", TEXT), ("NEW RECORD", TEXT), (f"Name: {controller.name}_", TEXT)]
     if phase is Phase.TABLE:
-        lines = [("GAME OVER", TEXT), ("HIGH SCORES", TEXT)]
-        entries = controller.scores.entries
-        for place, entry in enumerate(entries, start=1):
-            color = HIGHLIGHT if place == controller.highlight else TEXT
-            lines.append((f"{place}. {entry.name} {entry.score}", color))
-        if not entries:
-            lines.append(("No records yet", TEXT))
-        lines.append(("Press Enter", TEXT))
+        lines = [("GAME OVER", TEXT), (SCORES_TITLE, TEXT)]
+        lines += score_rows(controller)
+        lines += [(hint, TEXT) for hint in TABLE_HINTS]
         return lines
     if controller.paused:
-        return [("PAUSE", TEXT)]
+        return [(PAUSE_TITLE, TEXT)] + _items(menus.PAUSE_ITEMS, controller.pause_index)
     return []
+
+
+def score_rows(controller: Controller) -> list[tuple[str, Color]]:
+    """High score rows "<place>. <name> <score>", this game's record highlighted, or the
+    no-records line for an empty table."""
+    entries = controller.scores.entries
+    if not entries:
+        return [(NO_RECORDS, TEXT)]
+    return [
+        (f"{place}. {entry.name} {entry.score}",
+         HIGHLIGHT if place == controller.highlight else TEXT)
+        for place, entry in enumerate(entries, start=1)
+    ]
+
+
+def _items(items: tuple[str, ...], selected: int) -> list[tuple[str, Color]]:
+    """Menu items with the selected one highlighted."""
+    return [(item, HIGHLIGHT if i == selected else TEXT) for i, item in enumerate(items)]
 
 
 def overlay_texts(controller: Controller) -> list[str]:
@@ -135,38 +166,71 @@ def overlay_texts(controller: Controller) -> list[str]:
     return [text for text, _ in overlay_lines(controller)]
 
 
-def key_screen(controller: Controller) -> str | None:
-    """Which key screen covers the window: "splash", "help" (F1) or None."""
-    if controller.phase is Phase.SPLASH:
-        return "splash"
-    if controller.help_open:
+def full_screen(controller: Controller) -> str | None:
+    """Which screen covers the whole window: "menu", "scores", "settings", "controls",
+    "help" (the key list opened with F1) or None when the field is shown."""
+    screen = {
+        Phase.MENU: "menu",
+        Phase.SCORES: "scores",
+        Phase.SETTINGS: "settings",
+        Phase.CONTROLS: "controls",
+    }.get(controller.phase)
+    if screen is None and controller.help_open:
         return "help"
-    return None
+    return screen
 
 
-def key_screen_texts(controller: Controller) -> list[tuple[str, tuple[int, int], str]]:
-    """Texts of the key screen as (text, position, role), or [] when none is shown.
+ScreenText = tuple[str, tuple[int, int], str, Color]
 
-    Roles: "title" and "hint" are centered on their position; "key" and "action"
-    start at it (left edge, top).
+
+def full_screen_texts(controller: Controller) -> list[ScreenText]:
+    """Texts of the full-window screen as (text, position, role, color), or [] when none
+    is shown.
+
+    Roles: "title" (big font), "item" and "hint" are centered on their position; "key"
+    and "action" (the two columns of the key list) start at it (left edge, top).
     """
-    screen = key_screen(controller)
+    screen = full_screen(controller)
     if screen is None:
         return []
     center_x = WINDOW_SIZE[0] // 2
-    texts = [(TITLE, (center_x, KEY_SCREEN_TITLE_Y), "title")]
+    if screen == "menu":
+        texts = [(TITLE, (center_x, MENU_TITLE_Y), "title", TEXT)]
+        items = _items(menus.MAIN_ITEMS, controller.menu_index)
+        texts += _column(items, center_x, MENU_ITEMS_Y, MENU_ITEMS_STEP)
+        return texts + [(MENU_HINT, (center_x, SCREEN_HINT_Y), "hint", TEXT)]
+    if screen == "scores":
+        texts = [(SCORES_TITLE, (center_x, SCREEN_TITLE_Y), "title", TEXT)]
+        texts += _column(score_rows(controller), center_x, SCORES_ROWS_Y, SCORES_ROWS_STEP)
+        return texts + [(RETURN_HINT, (center_x, SCREEN_HINT_Y), "hint", TEXT)]
+    if screen == "settings":
+        texts = [(SETTINGS_TITLE, (center_x, SCREEN_TITLE_Y), "title", TEXT)]
+        rows = [menus.setting_line(controller.settings, row) for row in menus.SETTING_ROWS]
+        items = _items((*rows, menus.BACK), controller.settings_index)
+        texts += _column(items, center_x, SETTINGS_ROWS_Y, SETTINGS_ROWS_STEP)
+        return texts + [(SETTINGS_HINT, (center_x, SCREEN_HINT_Y), "hint", TEXT)]
+    texts = [(TITLE, (center_x, KEY_SCREEN_TITLE_Y), "title", TEXT)]
     for row, (keys, action) in enumerate(HOTKEYS):
         y = KEY_TABLE_Y + row * KEY_TABLE_STEP
-        texts.append((keys, (KEY_COLUMN_X, y), "key"))
-        texts.append((action, (ACTION_COLUMN_X, y), "action"))
-    hint = SPLASH_HINT if screen == "splash" else HELP_HINT
-    texts.append((hint, (center_x, KEY_SCREEN_HINT_Y), "hint"))
-    return texts
+        texts.append((keys, (KEY_COLUMN_X, y), "key", HIGHLIGHT))
+        texts.append((action, (ACTION_COLUMN_X, y), "action", TEXT))
+    hint = RETURN_HINT if screen == "controls" else HELP_HINT
+    return texts + [(hint, (center_x, KEY_SCREEN_HINT_Y), "hint", TEXT)]
+
+
+def _column(
+    lines: list[tuple[str, Color]], center_x: int, first_y: int, step: int
+) -> list[ScreenText]:
+    """Lines centered one under another, starting at first_y, `step` apart."""
+    return [
+        (text, (center_x, first_y + i * step), "item", color)
+        for i, (text, color) in enumerate(lines)
+    ]
 
 
 def screen_texts(controller: Controller) -> list[str]:
     """Every text drawn on screen, in drawing order."""
-    key_texts = key_screen_texts(controller)
-    if key_texts:
-        return [text for text, _, _ in key_texts]
+    full = full_screen_texts(controller)
+    if full:
+        return [text for text, _, _, _ in full]
     return [text for text, _ in panel_texts(controller)] + overlay_texts(controller)

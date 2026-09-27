@@ -16,6 +16,7 @@ def points_for(lines_cleared: int, level: int) -> int:
     return LINE_CLEAR_POINTS[lines_cleared] * (level + 1)
 
 
-def level_for(total_lines: int) -> int:
-    """Level reached after clearing total_lines lines: one level per LINES_PER_LEVEL lines."""
-    return total_lines // LINES_PER_LEVEL
+def level_for(total_lines: int, start_level: int = 0) -> int:
+    """Level reached after clearing total_lines lines: one level per LINES_PER_LEVEL lines,
+    but never below the level the game started at."""
+    return max(start_level, total_lines // LINES_PER_LEVEL)

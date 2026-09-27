@@ -70,15 +70,16 @@ class Game:
         self._randomizer = Randomizer(rng if rng is not None else random.Random(seed))
         self.new_game()
 
-    def new_game(self) -> None:
-        """Start over: empty board, counters at zero, a new bag, fresh active and next
-        pieces, an empty hold slot."""
+    def new_game(self, start_level: int = 0) -> None:
+        """Start over at start_level: empty board, score and lines at zero, a new bag,
+        fresh active and next pieces, an empty hold slot."""
         self._randomizer.reset()
         self.board = Board()
         self.is_over = False
         self.score = 0
         self.lines = 0
-        self.level = 0
+        self.start_level = start_level
+        self.level = start_level
         self.last_cleared = 0  # lines removed by the most recent lock
         self.pieces_locked = 0
         self._gravity_time = 0  # accumulated time, in 1/60 ms
@@ -262,7 +263,7 @@ class Game:
         self.last_cleared = cleared
         self.score += points_for(cleared, self.level)  # level before this lock
         self.lines += cleared
-        self.level = level_for(self.lines)
+        self.level = level_for(self.lines, self.start_level)
         self.can_hold = True
         self._spawn(self.next_type)
 

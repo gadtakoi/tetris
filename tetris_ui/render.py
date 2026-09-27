@@ -17,7 +17,8 @@ TABLE_LINE_STEP = 28
 
 @dataclass(frozen=True)
 class Fonts:
-    """The fonts on screen: small for the panel and key screen, big for titles, table for high score rows."""
+    """The fonts on screen: small for the panel and full-window screens, big for titles,
+    table for the lines over the field."""
 
     small: pygame.font.Font
     big: pygame.font.Font
@@ -34,9 +35,10 @@ def make_fonts() -> Fonts:
 
 
 def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
-    """Draw one frame: the key screen, or the field, pieces, panel and overlay."""
-    if layout.key_screen(controller) is not None:
-        _draw_key_screen(surface, controller, fonts)
+    """Draw one frame: a full-window screen (menu, settings, key list...), or the field,
+    pieces, panel and overlay."""
+    if layout.full_screen(controller) is not None:
+        _draw_full_screen(surface, controller, fonts)
         return
     game = controller.game
     surface.fill(layout.WINDOW_BG)
@@ -47,11 +49,12 @@ def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
             if piece_type is not None:
                 _draw_cell(surface, layout.cell_rect(col, row), piece_type)
     if not game.is_over:
-        # The ghost goes first so the active piece covers it where they overlap.
-        ghost = layout.ghost_color(game.active.type)
-        for col, row in game.ghost_cells():
-            if row >= HIDDEN_ROWS:
-                _fill_ghost(surface, layout.cell_rect(col, row), ghost)
+        if controller.settings.ghost:
+            # The ghost goes first so the active piece covers it where they overlap.
+            ghost = layout.ghost_color(game.active.type)
+            for col, row in game.ghost_cells():
+                if row >= HIDDEN_ROWS:
+                    _fill_ghost(surface, layout.cell_rect(col, row), ghost)
         for col, row in game.active.cells():
             if row >= HIDDEN_ROWS:
                 _draw_cell(surface, layout.cell_rect(col, row), game.active.type)
@@ -106,17 +109,16 @@ def _draw_preview(
         _fill_cell(surface, (x + c * layout.CELL, y + r * layout.CELL, layout.CELL, layout.CELL), color)
 
 
-def _draw_key_screen(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
-    """Fill the window with the title, the hotkey table and the hint."""
+def _draw_full_screen(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
+    """Fill the window with the screen's title, lines and hint."""
     surface.fill(layout.WINDOW_BG)
-    for text, pos, role in layout.key_screen_texts(controller):
+    for text, pos, role, color in layout.full_screen_texts(controller):
         font = fonts.big if role == "title" else fonts.small
-        color = layout.HIGHLIGHT if role == "key" else layout.TEXT
         image = font.render(text, True, color)
-        if role in ("title", "hint"):
-            surface.blit(image, image.get_rect(center=pos))
-        else:
+        if role in ("key", "action"):
             surface.blit(image, pos)
+        else:
+            surface.blit(image, image.get_rect(center=pos))
 
 
 def _draw_overlay(
@@ -124,16 +126,18 @@ def _draw_overlay(
 ) -> None:
     """Shade the field and write the overlay lines over it.
 
-    The first line is a big title; the other lines go below it in the table font. A lone
-    title (PAUSE) is centered on the field.
+    The first line is a big title; the other lines go below it in the table font. The
+    pause menu is centered on the field; the game over lines start near its top.
     """
     shade = pygame.Surface((layout.FIELD_W, layout.FIELD_H), pygame.SRCALPHA)
     shade.fill((0, 0, 0, layout.OVERLAY_ALPHA))
     surface.blit(shade, (layout.FIELD_X, layout.FIELD_Y))
     center_x = layout.FIELD_X + layout.FIELD_W // 2
     (title, title_color), rest = lines[0], lines[1:]
-    # A lone title (PAUSE) sits in the middle; with more lines it moves up to make room.
-    title_y = layout.FIELD_Y + (layout.FIELD_H // 2 if not rest else 110)
+    if title == layout.PAUSE_TITLE:
+        title_y = layout.FIELD_Y + layout.FIELD_H // 2 - 40
+    else:
+        title_y = layout.FIELD_Y + 110
     image = fonts.big.render(title, True, title_color)
     surface.blit(image, image.get_rect(center=(center_x, title_y)))
     y = title_y + 60

@@ -32,7 +32,7 @@ set TETRIS_BUILD_TEST=1
 
 Тест собирает exe, проверяет удаление старого `tetris.exe`, копирует `SEVA Tetris.exe` в пустую временную папку, запускает его без экрана (`SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`, `--max-frames 30`) и проверяет код 0 и то, что рядом с exe ничего не появилось.
 
-Вручную — дважды щёлкнуть `dist\SEVA Tetris.exe`: открывается окно «SEVA Tetris» с заставкой, консоли нет.
+Вручную — дважды щёлкнуть `dist\SEVA Tetris.exe`: открывается окно «SEVA Tetris» с главным меню, консоли нет.
 
 ## Известные ограничения
 

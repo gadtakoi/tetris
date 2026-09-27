@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -96,3 +97,42 @@ def test_effects_volume_round_trip():
 def test_unknown_fields_are_ignored():
     text = settings_json(sfx_volume=70, language="ru")
     assert Settings.from_json(text).sfx_volume == 70
+
+
+# --- Game settings ---------------------------------------------------------
+
+
+def test_game_settings_defaults():
+    settings = Settings()
+    assert (settings.language, settings.start_level, settings.ghost, settings.autorepeat) == (
+        "en", 0, True, "normal")
+
+
+def test_game_settings_round_trip():
+    settings = Settings(language="ru", start_level=5, ghost=False, autorepeat="fast")
+    assert Settings.from_json(settings.to_json()) == settings
+
+
+def test_file_without_game_settings():
+    text = settings_json(music_on=False, music_volume=30, sfx_volume=70)
+    assert Settings.from_json(text) == Settings(music_on=False, music_volume=30, sfx_volume=70)
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("start_level", 25), ("start_level", -1), ("start_level", True), ("start_level", 5.0),
+    ("language", "de"), ("language", None),
+    ("ghost", 0), ("ghost", "false"),
+    ("autorepeat", "turbo"), ("autorepeat", 1),
+])
+def test_invalid_game_field_falls_back_alone(field, value):
+    good = {"language": "ru", "start_level": 7, "ghost": False, "autorepeat": "slow"}
+    loaded = Settings.from_json(settings_json(music_volume=30, **{**good, field: value}))
+    expected = {**good, field: getattr(Settings(), field)}
+    assert loaded == Settings(music_volume=30, **expected)
+
+
+def test_saving_one_group_keeps_the_other():
+    sound_changed = Settings(start_level=5, ghost=False).with_volume_step(-2)
+    game_changed = replace(Settings(music_on=False, sfx_volume=40), autorepeat="slow")
+    for settings in (sound_changed, game_changed):
+        assert Settings.from_json(settings.to_json()) == settings
