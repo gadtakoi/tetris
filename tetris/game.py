@@ -1,4 +1,4 @@
-"""Game state and piece control: moves, rotation, locking, scoring and game over."""
+"""Game state and piece control: moves, rotation, gravity, locking, scoring and game over."""
 
 from __future__ import annotations
 
@@ -7,9 +7,15 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from tetris.board import Board, Cell
+from tetris.gravity import FRAMES_PER_SECOND, frames_per_row
 from tetris.pieces import ROTATION_COUNT, PieceType, shape_cells, spawn_position
 from tetris.randomizer import Randomizer
 from tetris.scoring import level_for, points_for
+
+
+# Gravity time is kept in integer units of 1/60 ms, so frame-based intervals stay exact.
+_UNITS_PER_MS = FRAMES_PER_SECOND
+_MS_PER_SECOND = 1000
 
 
 class StepResult(Enum):
@@ -49,6 +55,7 @@ class Game:
         self.lines = 0
         self.level = 0
         self.last_cleared = 0  # lines removed by the most recent lock
+        self._gravity_time = 0  # accumulated time, in 1/60 ms
         self.active = ActivePiece.spawn(self._randomizer.next())
         self.next_type = self._randomizer.next()
 
@@ -65,6 +72,29 @@ class Game:
         return self._rotate(ROTATION_COUNT - 1)
 
     def step_down(self) -> StepResult:
+        result = self._advance()
+        if result is StepResult.MOVED:
+            self._gravity_time = 0  # a player's drop restarts the gravity interval
+        return result
+
+    def tick(self, dt_ms: int) -> None:
+        """Advance time by dt_ms milliseconds, applying gravity steps as they fall due."""
+        if dt_ms < 0:
+            raise ValueError(f"dt_ms must not be negative, got {dt_ms}")
+        if self.is_over:
+            return
+        self._gravity_time += dt_ms * _UNITS_PER_MS
+        # A lock spawns the next piece, which resets the time and ends the loop.
+        while not self.is_over and self._gravity_time >= self._gravity_interval():
+            self._gravity_time -= self._gravity_interval()
+            self._advance()
+
+    def _gravity_interval(self) -> int:
+        """Gravity interval of the current level, in 1/60 ms."""
+        return frames_per_row(self.level) * _MS_PER_SECOND
+
+    def _advance(self) -> StepResult:
+        """Move the active piece down one row, or lock it if it cannot move."""
         if self.is_over:
             return StepResult.REJECTED
         if self._try(replace(self.active, row=self.active.row + 1)):
@@ -96,6 +126,7 @@ class Game:
         self._spawn(self.next_type)
 
     def _spawn(self, piece_type: PieceType) -> None:
+        self._gravity_time = 0
         piece = ActivePiece.spawn(piece_type)
         if not self._fits(piece):
             self.is_over = True  # block out

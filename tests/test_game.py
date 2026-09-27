@@ -258,6 +258,136 @@ def test_rows_cleared_before_next_piece_spawns():
     assert occupied(game) == {(9, 2), (9, 3), (9, 4), (9, 5)}
 
 
+# --- Gravity ---------------------------------------------------------------
+
+T_SPAWN_CELLS = {(4, 2), (3, 3), (4, 3), (5, 3)}
+T_ONE_ROW_DOWN = {(4, 3), (3, 4), (4, 4), (5, 4)}
+
+
+def lower_o_to_floor(game: Game) -> None:
+    """Step the freshly spawned O down until it rests on row 21 without locking."""
+    assert game.active.type is PieceType.O
+    for _ in range(18):
+        assert game.step_down() is StepResult.MOVED
+    assert max(r for _, r in game.active.cells()) == 21
+
+
+def test_gravity_waits_for_the_interval():
+    game = make_game(PieceType.T, PieceType.T)
+    game.tick(799)
+    assert set(game.active.cells()) == T_SPAWN_CELLS
+
+
+def test_gravity_accumulates_across_ticks():
+    game = make_game(PieceType.T, PieceType.T)
+    game.tick(799)
+    game.tick(1)
+    assert set(game.active.cells()) == T_ONE_ROW_DOWN
+
+
+def test_one_tick_can_apply_several_steps():
+    game = make_game(PieceType.T, PieceType.T)
+    game.tick(1600)
+    assert game.active.row == ActivePiece.spawn(PieceType.T).row + 2
+
+
+def test_gravity_interval_is_exact_on_level_1():
+    game = make_game(PieceType.T, PieceType.T)
+    game.lines, game.level = 10, 1
+    game.tick(716)
+    assert set(game.active.cells()) == T_SPAWN_CELLS
+    game.tick(1)
+    assert set(game.active.cells()) == T_ONE_ROW_DOWN
+
+
+def test_zero_tick_changes_nothing():
+    game = make_game(PieceType.T, PieceType.T)
+    game.tick(799)
+    game.tick(0)
+    assert set(game.active.cells()) == T_SPAWN_CELLS
+
+
+def test_negative_tick_is_rejected_without_changes():
+    game = make_game(PieceType.T, PieceType.T)
+    game.tick(400)
+    with pytest.raises(ValueError):
+        game.tick(-1)
+    assert set(game.active.cells()) == T_SPAWN_CELLS
+    game.tick(399)
+    assert set(game.active.cells()) == T_SPAWN_CELLS
+    game.tick(1)
+    assert set(game.active.cells()) == T_ONE_ROW_DOWN
+
+
+def test_gravity_locks_piece_on_floor():
+    game = make_game(PieceType.O, PieceType.T)
+    lower_o_to_floor(game)
+    game.tick(800)
+    assert occupied(game) == {(4, 20), (5, 20), (4, 21), (5, 21)}
+    assert game.active == ActivePiece.spawn(PieceType.T)
+
+
+def test_leftover_time_after_lock_is_dropped():
+    game = make_game(PieceType.O, PieceType.T)
+    lower_o_to_floor(game)
+    game.tick(1500)
+    assert game.active == ActivePiece.spawn(PieceType.T)
+    game.tick(799)
+    assert game.active == ActivePiece.spawn(PieceType.T)
+    game.tick(1)
+    assert set(game.active.cells()) == T_ONE_ROW_DOWN
+
+
+def test_player_step_down_restarts_gravity_interval():
+    game = make_game(PieceType.T, PieceType.T)
+    game.tick(500)
+    assert game.step_down() is StepResult.MOVED
+    game.tick(500)
+    assert set(game.active.cells()) == T_ONE_ROW_DOWN
+
+
+def test_move_does_not_restart_gravity_interval():
+    game = make_game(PieceType.T, PieceType.T)
+    game.tick(500)
+    assert game.move_left()
+    game.tick(300)
+    assert set(game.active.cells()) == {(c - 1, r) for c, r in T_ONE_ROW_DOWN}
+
+
+def test_new_game_restarts_gravity_interval():
+    game = make_game(PieceType.T, PieceType.T, PieceType.T)
+    game.tick(500)
+    game.new_game()
+    game.tick(500)
+    assert game.active == ActivePiece.spawn(game.active.type)
+
+
+def test_level_up_speeds_up_the_next_piece():
+    game = make_game(PieceType.O, PieceType.T)
+    game.lines = 9
+    fill_rows(game, range(21, 22), range(8))
+    for _ in range(4):
+        assert game.move_right()
+    lower_o_to_floor(game)
+    game.tick(800)
+    assert (game.lines, game.level) == (10, 1)
+    assert game.active == ActivePiece.spawn(PieceType.T)
+    game.tick(716)
+    assert set(game.active.cells()) == T_SPAWN_CELLS
+    game.tick(1)
+    assert set(game.active.cells()) == T_ONE_ROW_DOWN
+
+
+def test_time_after_game_over_changes_nothing():
+    game = make_game(PieceType.O)
+    while not game.is_over:
+        drop_to_bottom(game)
+    before = (occupied(game), game.active, game.next_type, game.score, game.lines, game.level)
+    game.tick(10_000)
+    after = (occupied(game), game.active, game.next_type, game.score, game.lines, game.level)
+    assert after == before
+
+
 # --- Game over -------------------------------------------------------------
 
 
@@ -322,3 +452,40 @@ def test_random_play_keeps_invariants(seed):
         assert 0 <= game.last_cleared <= 4
         assert game.score >= prev_score and game.lines >= prev_lines
         prev_score, prev_lines = game.score, game.lines
+
+
+def assert_consistent(game: Game) -> None:
+    if not game.is_over:
+        assert all(game.board.is_free(c, r) for c, r in game.active.cells())
+    for r in range(HEIGHT):
+        assert sum(game.board.get(c, r) is not None for c in range(WIDTH)) < WIDTH
+    assert game.level == game.lines // 10
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_random_play_with_gravity_keeps_invariants(seed):
+    game = Game(seed=seed)
+    commands = [
+        game.move_left,
+        game.move_right,
+        game.rotate_cw,
+        game.rotate_ccw,
+        game.step_down,
+    ]
+    actions = random.Random(2000 + seed)
+    for _ in range(1000):
+        if actions.random() < 0.5:
+            game.tick(actions.randint(0, 200))
+        else:
+            actions.choice(commands)()
+        assert_consistent(game)
+
+
+def test_gravity_alone_ends_the_game():
+    game = Game(seed=7)
+    for _ in range(200_000):
+        if game.is_over:
+            break
+        game.tick(16)
+        assert_consistent(game)
+    assert game.is_over
