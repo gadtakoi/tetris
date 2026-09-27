@@ -37,6 +37,13 @@ class Board:
         for col, row in cells:
             self._grid[row][col] = piece_type
 
+    def clear_full_rows(self) -> int:
+        """Remove every full row, shift the rest down; return how many were removed."""
+        kept = [row for row in self._grid if any(cell is None for cell in row)]
+        cleared = HEIGHT - len(kept)
+        self._grid = [[None] * WIDTH for _ in range(cleared)] + kept
+        return cleared
+
     def visible_rows(self) -> list[list[PieceType | None]]:
         """Return copies of the visible rows (2-21), top to bottom."""
         return [list(row) for row in self._grid[HIDDEN_ROWS:]]

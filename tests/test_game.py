@@ -27,6 +27,28 @@ def drop_to_bottom(game: Game) -> None:
         pass
 
 
+def fill_rows(game: Game, rows: range, cols: range, piece_type=PieceType.J) -> None:
+    game.board.place([(c, r) for r in rows for c in cols], piece_type)
+
+
+def clear_single_row_with_o(game: Game) -> None:
+    """Active O drops into the gap at columns 8-9 of a row 21 filled in 0-7."""
+    assert game.active.type is PieceType.O
+    fill_rows(game, range(21, 22), range(8))
+    for _ in range(4):
+        assert game.move_right()
+    drop_to_bottom(game)
+
+
+def vertical_i_at_right_wall(game: Game) -> None:
+    """Turn the freshly spawned I upright and push it into column 9."""
+    assert game.active.type is PieceType.I
+    assert game.rotate_cw()
+    for _ in range(4):
+        assert game.move_right()
+    assert {c for c, _ in game.active.cells()} == {9}
+
+
 # --- Start of a game -------------------------------------------------------
 
 
@@ -37,18 +59,22 @@ def test_new_game_state():
     assert game.active.rotation == 0
     assert isinstance(game.next_type, PieceType)
     assert not game.is_over
+    assert (game.score, game.lines, game.level, game.last_cleared) == (0, 0, 0, 0)
 
 
 def test_restart_after_game_over():
     game = make_game(PieceType.O)
+    clear_single_row_with_o(game)
     for _ in range(100):
         if game.is_over:
             break
         drop_to_bottom(game)
     assert game.is_over
+    assert (game.score, game.lines) == (40, 1)
     game.new_game()
     assert occupied(game) == set()
     assert not game.is_over
+    assert (game.score, game.lines, game.level, game.last_cleared) == (0, 0, 0, 0)
     assert game.move_left()
 
 
@@ -165,6 +191,73 @@ def test_next_piece_becomes_active():
     assert game.next_type is PieceType.Z
 
 
+# --- Line clears and scoring ----------------------------------------------
+
+
+def test_lock_clears_single_row():
+    game = make_game(PieceType.O, PieceType.T)
+    clear_single_row_with_o(game)
+    assert occupied(game) == {(8, 21), (9, 21)}
+    assert game.board.get(8, 21) is PieceType.O
+    assert (game.score, game.lines, game.level, game.last_cleared) == (40, 1, 0, 1)
+
+
+def test_lock_clears_four_rows():
+    game = make_game(PieceType.I, PieceType.T)
+    vertical_i_at_right_wall(game)
+    fill_rows(game, range(18, 22), range(9))
+    drop_to_bottom(game)
+    assert occupied(game) == set()
+    assert (game.score, game.lines, game.last_cleared) == (1200, 4, 4)
+
+
+def test_lock_without_full_rows_scores_nothing():
+    game = make_game(PieceType.O, PieceType.T, PieceType.T)
+    clear_single_row_with_o(game)
+    assert game.last_cleared == 1
+    drop_to_bottom(game)
+    assert game.last_cleared == 0
+    assert (game.score, game.lines) == (40, 1)
+
+
+def test_level_up_after_tenth_line():
+    game = make_game(PieceType.O, PieceType.T)
+    game.lines = 8
+    fill_rows(game, range(20, 21), range(8))
+    clear_single_row_with_o(game)
+    assert (game.score, game.lines, game.level, game.last_cleared) == (100, 10, 1, 2)
+
+
+def test_points_use_level_before_the_lock():
+    game = make_game(PieceType.I, PieceType.T)
+    game.lines = 9
+    vertical_i_at_right_wall(game)
+    fill_rows(game, range(18, 22), range(9))
+    drop_to_bottom(game)
+    assert (game.score, game.lines, game.level) == (1200, 13, 1)
+
+
+def test_counters_kept_after_game_over():
+    game = make_game(PieceType.O)
+    game.score, game.lines = 340, 5
+    while not game.is_over:
+        drop_to_bottom(game)
+    assert (game.score, game.lines, game.level) == (340, 5, 0)
+
+
+def test_rows_cleared_before_next_piece_spawns():
+    game = make_game(PieceType.I, PieceType.T)
+    vertical_i_at_right_wall(game)
+    assert set(game.active.cells()) == {(9, 1), (9, 2), (9, 3), (9, 4)}
+    fill_rows(game, range(3, 4), range(9))  # covers T's spawn cells in row 3
+    game.board.place([(9, 5)], PieceType.Z)  # I cannot move down
+    assert game.step_down() is StepResult.LOCKED
+    assert game.last_cleared == 1
+    assert not game.is_over
+    assert game.active == ActivePiece.spawn(PieceType.T)
+    assert occupied(game) == {(9, 2), (9, 3), (9, 4), (9, 5)}
+
+
 # --- Game over -------------------------------------------------------------
 
 
@@ -217,10 +310,15 @@ def test_random_play_keeps_invariants(seed):
         game.step_down,
     ]
     actions = random.Random(1000 + seed)
+    prev_score, prev_lines = 0, 0
     for _ in range(500):
         actions.choice(commands)()
         if not game.is_over:
             assert all(game.board.is_free(c, r) for c, r in game.active.cells())
         for r in range(HEIGHT):
             row_filled = sum(game.board.get(c, r) is not None for c in range(WIDTH))
-            assert row_filled <= WIDTH
+            assert row_filled < WIDTH  # full rows never survive a lock
+        assert game.level == game.lines // 10
+        assert 0 <= game.last_cleared <= 4
+        assert game.score >= prev_score and game.lines >= prev_lines
+        prev_score, prev_lines = game.score, game.lines

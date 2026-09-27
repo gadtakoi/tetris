@@ -1,4 +1,4 @@
-"""Game state and piece control: moves, rotation, locking and game over."""
+"""Game state and piece control: moves, rotation, locking, scoring and game over."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from enum import Enum
 from tetris.board import Board, Cell
 from tetris.pieces import ROTATION_COUNT, PieceType, shape_cells, spawn_position
 from tetris.randomizer import Randomizer
+from tetris.scoring import level_for, points_for
 
 
 class StepResult(Enum):
@@ -44,6 +45,10 @@ class Game:
     def new_game(self) -> None:
         self.board = Board()
         self.is_over = False
+        self.score = 0
+        self.lines = 0
+        self.level = 0
+        self.last_cleared = 0  # lines removed by the most recent lock
         self.active = ActivePiece.spawn(self._randomizer.next())
         self.next_type = self._randomizer.next()
 
@@ -83,6 +88,11 @@ class Game:
 
     def _lock(self) -> None:
         self.board.place(self.active.cells(), self.active.type)
+        cleared = self.board.clear_full_rows()
+        self.last_cleared = cleared
+        self.score += points_for(cleared, self.level)  # level before this lock
+        self.lines += cleared
+        self.level = level_for(self.lines)
         self._spawn(self.next_type)
 
     def _spawn(self, piece_type: PieceType) -> None:
