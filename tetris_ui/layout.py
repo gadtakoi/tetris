@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from tetris.board import HIDDEN_ROWS, HEIGHT, VISIBLE_HEIGHT, WIDTH
 from tetris.pieces import PieceType
-from tetris_ui.input import Controller
+from tetris_ui.input import Controller, Phase
 
 WINDOW_SIZE = (520, 640)
 TITLE = "Tetris"
@@ -39,6 +39,7 @@ FIELD_BG: Color = (0, 0, 0)
 GRID: Color = (40, 40, 48)
 BORDER: Color = (200, 200, 200)
 TEXT: Color = (230, 230, 230)
+HIGHLIGHT: Color = (240, 240, 0)
 CELL_OUTLINE: Color = (20, 20, 20)
 OVERLAY_ALPHA = 160
 
@@ -67,13 +68,28 @@ def panel_texts(controller: Controller) -> list[tuple[str, tuple[int, int]]]:
     return texts
 
 
-def overlay_texts(controller: Controller) -> list[str]:
-    """Lines shown centered over the field, or none during normal play."""
-    if controller.game.is_over:
-        return ["GAME OVER", "Press Enter"]
+def overlay_lines(controller: Controller) -> list[tuple[str, Color]]:
+    """Lines shown over the field with their colors, or none during normal play."""
+    phase = controller.phase
+    if phase is Phase.NAME_ENTRY:
+        return [("GAME OVER", TEXT), ("NEW RECORD", TEXT), (f"Name: {controller.name}_", TEXT)]
+    if phase is Phase.TABLE:
+        lines = [("GAME OVER", TEXT), ("HIGH SCORES", TEXT)]
+        entries = controller.scores.entries
+        for place, entry in enumerate(entries, start=1):
+            color = HIGHLIGHT if place == controller.highlight else TEXT
+            lines.append((f"{place}. {entry.name} {entry.score}", color))
+        if not entries:
+            lines.append(("No records yet", TEXT))
+        lines.append(("Press Enter", TEXT))
+        return lines
     if controller.paused:
-        return ["PAUSE"]
+        return [("PAUSE", TEXT)]
     return []
+
+
+def overlay_texts(controller: Controller) -> list[str]:
+    return [text for text, _ in overlay_lines(controller)]
 
 
 def screen_texts(controller: Controller) -> list[str]:

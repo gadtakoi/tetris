@@ -5,7 +5,7 @@ from __future__ import annotations
 import pygame
 
 from tetris.game import Game
-from tetris_ui import layout, render
+from tetris_ui import layout, render, storage
 from tetris_ui.input import Controller, Key
 
 KEY_MAP: dict[int, Key] = {
@@ -21,6 +21,7 @@ KEY_MAP: dict[int, Key] = {
     pygame.K_ESCAPE: Key.PAUSE,
     pygame.K_RETURN: Key.RESTART,
     pygame.K_KP_ENTER: Key.RESTART,
+    pygame.K_BACKSPACE: Key.BACKSPACE,
 }
 
 
@@ -34,6 +35,9 @@ def handle_event(event: pygame.event.Event, controller: Controller) -> bool:
     """Route one event to the controller; return False when the window is closed."""
     if event.type == pygame.QUIT:
         return False
+    if event.type == pygame.TEXTINPUT:
+        controller.text_input(event.text)
+        return True
     key = KEY_MAP.get(getattr(event, "key", None))
     if key is not None:
         if event.type == pygame.KEYDOWN:
@@ -50,7 +54,13 @@ def main(max_frames: int | None = None) -> int:
         screen = create_window()
         fonts = render.make_fonts()
         clock = pygame.time.Clock()
-        controller = Controller(Game())
+        scores_path = storage.high_scores_path()
+        controller = Controller(
+            Game(),
+            storage.load(scores_path),
+            on_save=lambda scores: storage.save(scores, scores_path),
+        )
+        pygame.key.start_text_input()
         frames = 0
         while max_frames is None or frames < max_frames:
             frame_ms = clock.tick(layout.FPS)

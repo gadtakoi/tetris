@@ -3,8 +3,9 @@ import pytest
 from tests.helpers import ScriptedRng
 from tetris.game import Game, StepResult
 from tetris.pieces import PieceType
-from tetris_ui.input import Controller, Key, KeyRepeater
-from tetris_ui.layout import cell_rect, screen_texts
+from tetris.highscores import Entry, HighScores
+from tetris_ui.input import Controller, Key, KeyRepeater, Phase
+from tetris_ui.layout import HIGHLIGHT, TEXT, cell_rect, overlay_lines, overlay_texts, screen_texts
 
 
 class FakeGame:
@@ -12,6 +13,7 @@ class FakeGame:
 
     def __init__(self) -> None:
         self.is_over = False
+        self.score = self.lines = self.level = 0
         self.calls: list[str] = []
         self.ticks: list[int] = []
 
@@ -251,14 +253,88 @@ def finished_game() -> Game:
     return game
 
 
-def test_enter_restarts_after_game_over():
+def test_enter_restarts_when_result_misses_the_table():
     game = finished_game()
-    game.score, game.lines, game.level = 340, 5, 0
+    assert game.score == 0
     controller = Controller(game)
+    assert controller.phase is Phase.TABLE
     controller.key_down(Key.RESTART)
+    assert controller.phase is Phase.PLAYING
     assert not game.is_over
     assert (game.score, game.lines, game.level) == (0, 0, 0)
     assert all(cell is None for row in game.board.visible_rows() for cell in row)
+
+
+def record_game(score: int = 340) -> Game:
+    game = finished_game()
+    game.score, game.lines, game.level = score, 3, 0
+    return game
+
+
+def test_name_entry_then_restart():
+    saved = []
+    game = record_game()
+    controller = Controller(game, HighScores(), on_save=saved.append)
+    assert controller.phase is Phase.NAME_ENTRY
+    controller.text_input("Ann")
+    controller.key_down(Key.RESTART)
+    assert controller.phase is Phase.TABLE
+    assert game.is_over  # the confirming Enter does not restart
+    assert controller.scores.entries == (Entry("Ann", 340, 3, 0),)
+    assert controller.highlight == 1
+    assert saved == [controller.scores]
+    controller.key_down(Key.RESTART)
+    assert controller.phase is Phase.PLAYING
+    assert not game.is_over
+    assert controller.highlight is None
+
+
+def test_backspace_in_name_entry():
+    controller = Controller(record_game())
+    controller.text_input("Annx")
+    controller.key_down(Key.BACKSPACE)
+    controller.key_down(Key.RESTART)
+    assert controller.scores.entries[0].name == "Ann"
+
+
+def test_control_letters_are_typed_in_name_entry():
+    game = record_game()
+    controller = Controller(game)
+    for key, text in ((Key.ROTATE_CCW, "Z"), (Key.ROTATE_CW, "X"), (Key.PAUSE, "P")):
+        controller.key_down(key)
+        controller.text_input(text)
+    assert controller.name == "ZXP"
+    assert not controller.paused
+    assert controller.phase is Phase.NAME_ENTRY
+
+
+def test_text_is_ignored_outside_name_entry(controller):
+    controller.text_input("abc")
+    assert controller.name == ""
+
+
+def test_empty_name_is_saved_as_player():
+    controller = Controller(record_game())
+    controller.key_down(Key.RESTART)
+    assert controller.scores.entries[0].name == "PLAYER"
+
+
+def test_game_over_during_play_switches_phase():
+    game = Game(rng=ScriptedRng([PieceType.O]))
+    controller = Controller(game)
+    while controller.phase is Phase.PLAYING:
+        controller.key_down(Key.HARD_DROP)
+    assert game.is_over
+    assert controller.phase is Phase.TABLE  # hard drops score nothing
+
+
+def test_table_phase_ignores_control_keys():
+    game = finished_game()
+    controller = Controller(game)
+    for key in (Key.PAUSE, Key.LEFT, Key.BACKSPACE):
+        controller.key_down(key)
+    assert controller.phase is Phase.TABLE
+    assert not controller.paused
 
 
 def test_enter_during_real_play_changes_nothing():
@@ -296,13 +372,41 @@ def test_texts_on_pause():
     assert screen_texts(controller)[-1] == "PAUSE"
 
 
-def test_texts_after_game_over():
-    game = finished_game()
-    game.score = 340
-    controller = Controller(game)
+def test_texts_game_over_without_record():
+    table = HighScores()
+    table.add(Entry("ANNA", 1200, 13, 1))
+    controller = Controller(finished_game(), table)
     texts = screen_texts(controller)
-    assert texts[-2:] == ["GAME OVER", "Press Enter"]
-    assert "340" in texts
+    assert texts[texts.index("SCORE") + 1] == "0"
+    assert overlay_texts(controller) == ["GAME OVER", "HIGH SCORES", "1. ANNA 1200", "Press Enter"]
+
+
+def test_texts_name_entry():
+    controller = Controller(record_game(340))
+    controller.text_input("Ann")
+    assert overlay_texts(controller) == ["GAME OVER", "NEW RECORD", "Name: Ann_"]
+    assert "340" in screen_texts(controller)
+
+
+def test_new_entry_is_highlighted():
+    table = HighScores()
+    table.add(Entry("ANNA", 1200, 13, 1))
+    controller = Controller(record_game(340), table)
+    controller.text_input("Ann")
     controller.key_down(Key.RESTART)
-    assert "GAME OVER" not in screen_texts(controller)
-    assert "Press Enter" not in screen_texts(controller)
+    lines = dict(overlay_lines(controller))
+    assert lines["2. Ann 340"] == HIGHLIGHT
+    assert lines["1. ANNA 1200"] == TEXT
+
+
+def test_empty_table_text():
+    controller = Controller(finished_game())
+    assert overlay_texts(controller) == ["GAME OVER", "HIGH SCORES", "No records yet", "Press Enter"]
+
+
+def test_texts_after_restart():
+    controller = Controller(finished_game())
+    controller.key_down(Key.RESTART)
+    texts = screen_texts(controller)
+    for gone in ("GAME OVER", "HIGH SCORES", "Press Enter"):
+        assert gone not in texts

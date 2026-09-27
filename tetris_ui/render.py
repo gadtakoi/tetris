@@ -11,16 +11,24 @@ from tetris.pieces import PieceType, shape_cells
 from tetris_ui import layout
 from tetris_ui.input import Controller
 
+TABLE_FONT_SIZE = 26
+TABLE_LINE_STEP = 28
+
 
 @dataclass(frozen=True)
 class Fonts:
     small: pygame.font.Font
     big: pygame.font.Font
+    table: pygame.font.Font
 
 
 def make_fonts() -> Fonts:
     """Built-in pygame font, so no system fonts are needed. Requires pygame.font.init()."""
-    return Fonts(small=pygame.font.Font(None, 32), big=pygame.font.Font(None, 56))
+    return Fonts(
+        small=pygame.font.Font(None, 32),
+        big=pygame.font.Font(None, 56),
+        table=pygame.font.Font(None, TABLE_FONT_SIZE),
+    )
 
 
 def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
@@ -44,7 +52,7 @@ def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
     _draw_preview(surface, game.next_type)
     for text, pos in layout.panel_texts(controller):
         surface.blit(fonts.small.render(text, True, layout.TEXT), pos)
-    overlay = layout.overlay_texts(controller)
+    overlay = layout.overlay_lines(controller)
     if overlay:
         _draw_overlay(surface, overlay, fonts)
 
@@ -81,14 +89,20 @@ def _draw_preview(surface: pygame.Surface, piece_type: PieceType) -> None:
         _draw_cell(surface, rect, piece_type)
 
 
-def _draw_overlay(surface: pygame.Surface, lines: list[str], fonts: Fonts) -> None:
+def _draw_overlay(
+    surface: pygame.Surface, lines: list[tuple[str, layout.Color]], fonts: Fonts
+) -> None:
     shade = pygame.Surface((layout.FIELD_W, layout.FIELD_H), pygame.SRCALPHA)
     shade.fill((0, 0, 0, layout.OVERLAY_ALPHA))
     surface.blit(shade, (layout.FIELD_X, layout.FIELD_Y))
     center_x = layout.FIELD_X + layout.FIELD_W // 2
-    y = layout.FIELD_Y + layout.FIELD_H // 2 - 40 * (len(lines) - 1)
-    for i, line in enumerate(lines):
-        font = fonts.big if i == 0 else fonts.small
-        image = font.render(line, True, layout.TEXT)
+    (title, title_color), rest = lines[0], lines[1:]
+    # A lone title (PAUSE) sits in the middle; with more lines it moves up to make room.
+    title_y = layout.FIELD_Y + (layout.FIELD_H // 2 if not rest else 110)
+    image = fonts.big.render(title, True, title_color)
+    surface.blit(image, image.get_rect(center=(center_x, title_y)))
+    y = title_y + 60
+    for text, color in rest:
+        image = fonts.table.render(text, True, color)
         surface.blit(image, image.get_rect(center=(center_x, y)))
-        y += 70
+        y += TABLE_LINE_STEP

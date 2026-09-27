@@ -153,11 +153,17 @@ def test_window_size_and_title():
     assert pygame.display.get_caption()[0] == "Tetris"
 
 
-def test_main_runs_frames():
+@pytest.fixture
+def data_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("TETRIS_DATA_DIR", str(tmp_path))
+    return tmp_path
+
+
+def test_main_runs_frames(data_dir):
     assert app.main(max_frames=3) == 0
 
 
-def test_quit_event_ends_main_early():
+def test_quit_event_ends_main_early(data_dir):
     pygame.event.post(pygame.event.Event(pygame.QUIT))
     start = time.monotonic()
     assert app.main(max_frames=600) == 0  # 600 frames would take ~10 s
@@ -198,6 +204,33 @@ def test_keydown_event_reaches_game():
     controller = Controller(game)
     app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT), controller)
     assert game.active.col == ActivePiece.spawn(PieceType.T).col - 1
+
+
+def test_text_input_event_reaches_name():
+    game = Game(rng=ScriptedRng([PieceType.O]))
+    while not game.is_over:
+        game.hard_drop()
+    game.score = 340
+    controller = Controller(game)
+    app.handle_event(pygame.event.Event(pygame.TEXTINPUT, text="Иван"), controller)
+    app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE), controller)
+    assert controller.name == "Ива"
+
+
+def test_longest_table_row_fits_the_field():
+    width = render.make_fonts().table.size("10. ШШШШШШШШШШ 9999999")[0]
+    assert width < layout.FIELD_W
+
+
+def test_game_over_table_renders():
+    game = Game(rng=ScriptedRng([PieceType.O]))
+    while not game.is_over:
+        game.hard_drop()
+    game.score = 340
+    controller = Controller(game)
+    controller.text_input("Ann")
+    controller.key_down(Key.RESTART)
+    draw_game(game, controller)  # must not raise with a highlighted row
 
 
 def test_quit_event_stops_loop():

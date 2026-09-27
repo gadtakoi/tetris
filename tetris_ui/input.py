@@ -1,9 +1,12 @@
-"""Keyboard input rules without pygame: auto-repeat, pause, restart and frame time."""
+"""Keyboard input rules without pygame: auto-repeat, pause, frame time, name entry and restart."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
 from typing import Protocol
+
+from tetris.highscores import Entry, HighScores, append_to_name, final_name
 
 SHIFT_DELAY_MS = 170
 SHIFT_INTERVAL_MS = 50
@@ -20,10 +23,20 @@ class Key(Enum):
     ROTATE_CCW = "rotate_ccw"
     PAUSE = "pause"
     RESTART = "restart"
+    BACKSPACE = "backspace"
+
+
+class Phase(Enum):
+    PLAYING = "playing"
+    NAME_ENTRY = "name_entry"  # the result made the high score table
+    TABLE = "table"  # showing the table, Enter starts a new game
 
 
 class GameLike(Protocol):
     is_over: bool
+    score: int
+    lines: int
+    level: int
 
     def move_left(self) -> object: ...
     def move_right(self) -> object: ...
@@ -72,28 +85,49 @@ class KeyRepeater:
 class Controller:
     """Turns key presses and frame time into commands on the game."""
 
-    def __init__(self, game: GameLike) -> None:
+    def __init__(
+        self,
+        game: GameLike,
+        scores: HighScores | None = None,
+        on_save: Callable[[HighScores], object] | None = None,
+    ) -> None:
         self.game = game
+        self.scores = scores if scores is not None else HighScores()
+        self._on_save = on_save
         self.paused = False
+        self.name = ""  # the name being typed in NAME_ENTRY
+        self.highlight: int | None = None  # table place of this game's result
+        self._phase = Phase.PLAYING
         self._shift = KeyRepeater(SHIFT_DELAY_MS, SHIFT_INTERVAL_MS)
         self._shift_key: Key | None = None  # the horizontal key that repeats
         self._drop = KeyRepeater(SOFT_DROP_INTERVAL_MS, SOFT_DROP_INTERVAL_MS)
 
     @property
+    def phase(self) -> Phase:
+        self._check_game_over()
+        return self._phase
+
+    @property
     def playing(self) -> bool:
-        return not self.paused and not self.game.is_over
+        return self.phase is Phase.PLAYING and not self.paused
 
     def key_down(self, key: Key) -> None:
-        if key is Key.PAUSE:
-            if not self.game.is_over:
-                self.paused = not self.paused
-                self._release_all()
+        phase = self.phase
+        if phase is Phase.NAME_ENTRY:
+            if key is Key.RESTART:
+                self._confirm_name()
+            elif key is Key.BACKSPACE:
+                self.name = self.name[:-1]
             return
-        if key is Key.RESTART:
-            if self.game.is_over:
+        if phase is Phase.TABLE:
+            if key is Key.RESTART:
                 self.game.new_game()
-                self.paused = False
-                self._release_all()
+                self.highlight = None
+                self._phase = Phase.PLAYING
+            return
+        if key is Key.PAUSE:
+            self.paused = not self.paused
+            self._release_all()
             return
         if not self.playing:
             return
@@ -110,6 +144,12 @@ class Controller:
             self.game.rotate_cw()
         elif key is Key.ROTATE_CCW:
             self.game.rotate_ccw()
+        self._check_game_over()
+
+    def text_input(self, text: str) -> None:
+        """Typed characters; they only matter while entering a record name."""
+        if self.phase is Phase.NAME_ENTRY:
+            self.name = append_to_name(self.name, text)
 
     def key_up(self, key: Key) -> None:
         if key is self._shift_key:
@@ -130,12 +170,33 @@ class Controller:
             self.game.step_down()
         if not self.game.is_over:
             self.game.tick(min(frame_ms, MAX_FRAME_MS))
+        self._check_game_over()
 
     def _shift_once(self) -> None:
         if self._shift_key is Key.LEFT:
             self.game.move_left()
         elif self._shift_key is Key.RIGHT:
             self.game.move_right()
+
+    def _check_game_over(self) -> None:
+        """Leave PLAYING once the game is over: ask for a name or show the table."""
+        if self._phase is not Phase.PLAYING or not self.game.is_over:
+            return
+        self.paused = False
+        self._release_all()
+        self.name = ""
+        if self.scores.qualifies(self.game.score):
+            self._phase = Phase.NAME_ENTRY
+        else:
+            self._phase = Phase.TABLE
+
+    def _confirm_name(self) -> None:
+        game = self.game
+        entry = Entry(final_name(self.name), game.score, game.lines, game.level)
+        self.highlight = self.scores.add(entry)
+        if self._on_save is not None:
+            self._on_save(self.scores)
+        self._phase = Phase.TABLE
 
     def _release_all(self) -> None:
         self._shift.release()
