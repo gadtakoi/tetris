@@ -1,4 +1,5 @@
-"""Keyboard input rules without pygame: auto-repeat, pause, frame time, name entry and restart."""
+"""Keyboard input rules without pygame: auto-repeat, pause, frame time, name entry,
+restart, sound toggles and the sound events of each frame."""
 
 from __future__ import annotations
 
@@ -24,6 +25,20 @@ class Key(Enum):
     PAUSE = "pause"
     RESTART = "restart"
     BACKSPACE = "backspace"
+    TOGGLE_MUSIC = "toggle_music"
+    TOGGLE_SOUND = "toggle_sound"
+
+
+class Sound(Enum):
+    """Sound effects; the values name the synthesized effects."""
+
+    MOVE = "move"
+    ROTATE = "rotate"
+    LOCK = "lock"
+    CLEAR = "clear"
+    TETRIS = "tetris"
+    LEVEL_UP = "level_up"
+    GAME_OVER = "game_over"
 
 
 class Phase(Enum):
@@ -37,6 +52,7 @@ class GameLike(Protocol):
     score: int
     lines: int
     level: int
+    pieces_locked: int
 
     def move_left(self) -> object: ...
     def move_right(self) -> object: ...
@@ -98,6 +114,11 @@ class Controller:
         self.name = ""  # the name being typed in NAME_ENTRY
         self.highlight: int | None = None  # table place of this game's result
         self._phase = Phase.PLAYING
+        self.music_on = True
+        self.sound_on = True
+        # Grows whenever the music must start over (new game, music switched on).
+        self.music_generation = 0
+        self._sounds: dict[Sound, None] = {}  # this frame's sounds, ordered, no repeats
         self._shift = KeyRepeater(SHIFT_DELAY_MS, SHIFT_INTERVAL_MS)
         self._shift_key: Key | None = None  # the horizontal key that repeats
         self._drop = KeyRepeater(SOFT_DROP_INTERVAL_MS, SOFT_DROP_INTERVAL_MS)
@@ -111,8 +132,24 @@ class Controller:
     def playing(self) -> bool:
         return self.phase is Phase.PLAYING and not self.paused
 
+    @property
+    def music_state(self) -> str:
+        """What the music should do now: "playing", "paused" or "stopped"."""
+        if not self.music_on or self.phase is not Phase.PLAYING:
+            return "stopped"
+        return "paused" if self.paused else "playing"
+
+    def drain_sounds(self) -> list[Sound]:
+        """The sound events since the last call, each at most once."""
+        sounds = list(self._sounds)
+        self._sounds.clear()
+        return sounds
+
     def key_down(self, key: Key) -> None:
         phase = self.phase
+        if key in (Key.TOGGLE_MUSIC, Key.TOGGLE_SOUND) and phase is not Phase.NAME_ENTRY:
+            self._toggle(key)
+            return
         if phase is Phase.NAME_ENTRY:
             if key is Key.RESTART:
                 self._confirm_name()
@@ -124,6 +161,7 @@ class Controller:
                 self.game.new_game()
                 self.highlight = None
                 self._phase = Phase.PLAYING
+                self.music_generation += 1
             return
         if key is Key.PAUSE:
             self.paused = not self.paused
@@ -131,6 +169,7 @@ class Controller:
             return
         if not self.playing:
             return
+        before = self._snapshot()
         if key in (Key.LEFT, Key.RIGHT):
             self._shift_key = key
             self._shift.press()
@@ -141,9 +180,10 @@ class Controller:
         elif key is Key.HARD_DROP:
             self.game.hard_drop()
         elif key is Key.ROTATE_CW:
-            self.game.rotate_cw()
+            self._sound_if(self.game.rotate_cw(), Sound.ROTATE)
         elif key is Key.ROTATE_CCW:
-            self.game.rotate_ccw()
+            self._sound_if(self.game.rotate_ccw(), Sound.ROTATE)
+        self._record_changes(before)
         self._check_game_over()
 
     def text_input(self, text: str) -> None:
@@ -162,21 +202,56 @@ class Controller:
         """Apply held-key repeats, then pass the (capped) frame time to the game."""
         if not self.playing:
             return
+        before = self._snapshot()
         for _ in range(self._shift.update(frame_ms)):
             self._shift_once()
         for _ in range(self._drop.update(frame_ms)):
             if self.game.is_over:
-                return
+                break
             self.game.step_down()
         if not self.game.is_over:
             self.game.tick(min(frame_ms, MAX_FRAME_MS))
+        self._record_changes(before)
         self._check_game_over()
 
     def _shift_once(self) -> None:
         if self._shift_key is Key.LEFT:
-            self.game.move_left()
+            self._sound_if(self.game.move_left(), Sound.MOVE)
         elif self._shift_key is Key.RIGHT:
-            self.game.move_right()
+            self._sound_if(self.game.move_right(), Sound.MOVE)
+
+    def _toggle(self, key: Key) -> None:
+        if key is Key.TOGGLE_SOUND:
+            self.sound_on = not self.sound_on
+            return
+        self.music_on = not self.music_on
+        if self.music_on:
+            self.music_generation += 1  # switching music on starts it over
+
+    def _snapshot(self) -> tuple[int, int, int, bool]:
+        game = self.game
+        return game.pieces_locked, game.lines, game.level, game.is_over
+
+    def _record_changes(self, before: tuple[int, int, int, bool]) -> None:
+        """Turn what changed in the game since `before` into sound events."""
+        locked, lines, level, was_over = before
+        game = self.game
+        if game.pieces_locked > locked:
+            cleared = game.lines - lines
+            if cleared >= 4:
+                self._sounds[Sound.TETRIS] = None
+            elif cleared > 0:
+                self._sounds[Sound.CLEAR] = None
+            else:
+                self._sounds[Sound.LOCK] = None
+        if game.level > level:
+            self._sounds[Sound.LEVEL_UP] = None
+        if game.is_over and not was_over:
+            self._sounds[Sound.GAME_OVER] = None
+
+    def _sound_if(self, done: object, sound: Sound) -> None:
+        if done:
+            self._sounds[sound] = None
 
     def _check_game_over(self) -> None:
         """Leave PLAYING once the game is over: ask for a name or show the table."""

@@ -6,6 +6,7 @@ import pygame
 
 from tetris.game import Game
 from tetris_ui import layout, render, storage
+from tetris_ui.audio import Audio
 from tetris_ui.input import Controller, Key
 
 KEY_MAP: dict[int, Key] = {
@@ -22,6 +23,8 @@ KEY_MAP: dict[int, Key] = {
     pygame.K_RETURN: Key.RESTART,
     pygame.K_KP_ENTER: Key.RESTART,
     pygame.K_BACKSPACE: Key.BACKSPACE,
+    pygame.K_m: Key.TOGGLE_MUSIC,
+    pygame.K_n: Key.TOGGLE_SOUND,
 }
 
 
@@ -61,6 +64,7 @@ def main(max_frames: int | None = None) -> int:
             on_save=lambda scores: storage.save(scores, scores_path),
         )
         pygame.key.start_text_input()
+        audio = Audio.create()
         frames = 0
         while max_frames is None or frames < max_frames:
             frame_ms = clock.tick(layout.FPS)
@@ -68,6 +72,7 @@ def main(max_frames: int | None = None) -> int:
                 if not handle_event(event, controller):
                     return 0
             controller.update(frame_ms)
+            audio.sync(controller)
             render.draw(screen, controller, fonts)
             pygame.display.flip()
             frames += 1

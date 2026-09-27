@@ -352,6 +352,37 @@ def test_hard_drop_locks_where_the_ghost_is(seed):
     assert checked > 0
 
 
+# --- Locked piece counter --------------------------------------------------
+
+
+def test_new_game_has_no_locked_pieces():
+    game = make_game(PieceType.O, PieceType.O)
+    drop_to_bottom(game)
+    game.new_game()
+    assert game.pieces_locked == 0
+
+
+def test_locks_are_counted_whatever_their_cause():
+    game = make_game(PieceType.O, PieceType.T)
+    drop_to_bottom(game)  # the player's step_down locks the O
+    assert game.pieces_locked == 1
+    for _ in range(16):  # the T now rests on the O without locking
+        assert game.step_down() is StepResult.MOVED
+    assert game.pieces_locked == 1
+    game.tick(800)  # gravity locks the T
+    assert game.pieces_locked == 2
+
+
+def test_lock_that_ends_the_game_is_counted():
+    game = make_game(PieceType.O)
+    while True:
+        before = game.pieces_locked
+        game.hard_drop()
+        if game.is_over:
+            break
+    assert game.pieces_locked == before + 1
+
+
 # --- Gravity ---------------------------------------------------------------
 
 T_SPAWN_CELLS = {(4, 2), (3, 3), (4, 3), (5, 3)}

@@ -4,7 +4,7 @@ from tests.helpers import ScriptedRng
 from tetris.game import Game, StepResult
 from tetris.pieces import PieceType
 from tetris.highscores import Entry, HighScores
-from tetris_ui.input import Controller, Key, KeyRepeater, Phase
+from tetris_ui.input import Controller, Key, KeyRepeater, Phase, Sound
 from tetris_ui.layout import HIGHLIGHT, TEXT, cell_rect, overlay_lines, overlay_texts, screen_texts
 
 
@@ -13,7 +13,7 @@ class FakeGame:
 
     def __init__(self) -> None:
         self.is_over = False
-        self.score = self.lines = self.level = 0
+        self.score = self.lines = self.level = self.pieces_locked = 0
         self.calls: list[str] = []
         self.ticks: list[int] = []
 
@@ -362,8 +362,21 @@ def test_texts_during_play():
     controller = Controller(Game(seed=1))
     controller.game.score, controller.game.lines, controller.game.level = 1200, 13, 1
     assert screen_texts(controller) == [
-        "NEXT", "SCORE", "1200", "LINES", "13", "LEVEL", "1",
+        "NEXT", "SCORE", "1200", "LINES", "13", "LEVEL", "1", "MUSIC ON", "SOUND ON",
     ]
+
+
+def test_sound_indicators():
+    controller = Controller(Game(seed=1))
+    controller.key_down(Key.TOGGLE_MUSIC)
+    texts = screen_texts(controller)
+    assert "MUSIC OFF" in texts and "SOUND ON" in texts
+
+
+def test_indicators_sit_below_the_counters():
+    from tetris_ui.layout import panel_texts
+    positions = dict(panel_texts(Controller(Game(seed=1))))
+    assert positions["MUSIC ON"][1] >= 460 and positions["SOUND ON"][1] >= 460
 
 
 def test_texts_on_pause():
@@ -410,3 +423,159 @@ def test_texts_after_restart():
     texts = screen_texts(controller)
     for gone in ("GAME OVER", "HIGH SCORES", "Press Enter"):
         assert gone not in texts
+
+
+# --- Sound events ----------------------------------------------------------
+
+
+def real_controller(*pieces: PieceType) -> tuple[Game, Controller]:
+    game = Game(rng=ScriptedRng(pieces))
+    return game, Controller(game)
+
+
+def test_blocked_move_makes_no_sound():
+    game, controller = real_controller(PieceType.O, PieceType.O)
+    while game.move_left():
+        pass
+    controller.drain_sounds()
+    controller.key_down(Key.LEFT)
+    assert controller.drain_sounds() == []
+
+
+def test_successful_move_and_rotation_sound():
+    _, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.LEFT)
+    controller.key_down(Key.ROTATE_CW)
+    assert controller.drain_sounds() == [Sound.MOVE, Sound.ROTATE]
+
+
+def test_repeated_moves_sound_once_per_frame():
+    _, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.LEFT)
+    controller.drain_sounds()
+    controller.update(270)  # three auto-repeats in one frame
+    assert controller.drain_sounds().count(Sound.MOVE) == 1
+
+
+def test_gravity_lock_sound():
+    game, controller = real_controller(PieceType.O, PieceType.T)
+    for _ in range(18):
+        game.step_down()
+    controller.update(16)
+    assert controller.drain_sounds() == []  # not due yet
+    for _ in range(60):
+        controller.update(16)
+        if game.pieces_locked:
+            break
+    assert game.pieces_locked == 1
+    assert controller.drain_sounds() == [Sound.LOCK]
+
+
+def test_soft_drop_step_is_silent():
+    _, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.DOWN)
+    assert controller.drain_sounds() == []
+
+
+def test_tetris_with_level_up():
+    game, controller = real_controller(PieceType.I, PieceType.T)
+    game.lines = 9
+    assert game.rotate_cw()
+    for _ in range(4):
+        assert game.move_right()
+    game.board.place([(c, r) for r in range(18, 22) for c in range(9)], PieceType.J)
+    controller.key_down(Key.HARD_DROP)
+    assert controller.drain_sounds() == [Sound.TETRIS, Sound.LEVEL_UP]
+
+
+def test_single_line_clear_sound():
+    game, controller = real_controller(PieceType.O, PieceType.T)
+    game.board.place([(c, 21) for c in range(8)], PieceType.J)
+    for _ in range(4):
+        assert game.move_right()
+    controller.key_down(Key.HARD_DROP)
+    assert controller.drain_sounds() == [Sound.CLEAR]
+
+
+def test_game_over_sound():
+    game, controller = real_controller(PieceType.O)
+    sounds = []
+    while not game.is_over:
+        controller.key_down(Key.HARD_DROP)
+        sounds = controller.drain_sounds()
+    assert sounds == [Sound.LOCK, Sound.GAME_OVER]
+
+
+def test_sounds_are_recorded_even_when_effects_are_off():
+    # The audio layer decides whether to play; the controller only reports.
+    _, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.TOGGLE_SOUND)
+    controller.key_down(Key.LEFT)
+    assert not controller.sound_on
+    assert controller.drain_sounds() == [Sound.MOVE]
+
+
+# --- Music state and toggles -----------------------------------------------
+
+
+def test_music_state_follows_the_game():
+    game, controller = real_controller(PieceType.O)
+    assert controller.music_state == "playing"
+    controller.key_down(Key.PAUSE)
+    assert controller.music_state == "paused"
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.TOGGLE_MUSIC)
+    assert controller.music_state == "stopped"
+    controller.key_down(Key.TOGGLE_MUSIC)
+    while not game.is_over:
+        controller.key_down(Key.HARD_DROP)
+    assert controller.music_state == "stopped"
+
+
+def test_music_generation_grows_on_new_game_and_music_on():
+    _, controller = real_controller(PieceType.O)
+    start = controller.music_generation
+    controller.key_down(Key.TOGGLE_MUSIC)  # off
+    assert controller.music_generation == start
+    controller.key_down(Key.TOGGLE_MUSIC)  # on
+    assert controller.music_generation == start + 1
+    while controller.phase is Phase.PLAYING:
+        controller.key_down(Key.HARD_DROP)
+    controller.key_down(Key.RESTART)
+    assert controller.music_generation == start + 2
+
+
+def test_toggle_sound_sends_no_command(controller, game):
+    controller.key_down(Key.TOGGLE_SOUND)
+    assert not controller.sound_on
+    assert game.calls == []
+
+
+def test_toggle_music_keeps_pause(controller):
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.TOGGLE_MUSIC)
+    assert not controller.music_on
+    assert controller.paused
+
+
+def test_music_on_during_pause_waits_for_unpause(controller):
+    controller.key_down(Key.TOGGLE_MUSIC)
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.TOGGLE_MUSIC)
+    assert controller.music_state == "paused"
+    controller.key_down(Key.PAUSE)
+    assert controller.music_state == "playing"
+
+
+def test_m_is_typed_during_name_entry():
+    controller = Controller(record_game())
+    controller.key_down(Key.TOGGLE_MUSIC)
+    controller.text_input("M")
+    assert controller.name == "M"
+    assert controller.music_on
+
+
+def test_toggles_work_on_the_table_screen():
+    controller = Controller(finished_game())
+    controller.key_down(Key.TOGGLE_SOUND)
+    assert not controller.sound_on

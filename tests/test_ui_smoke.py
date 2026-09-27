@@ -184,6 +184,8 @@ def test_quit_event_ends_main_early(data_dir):
         (pygame.K_p, Key.PAUSE),
         (pygame.K_ESCAPE, Key.PAUSE),
         (pygame.K_RETURN, Key.RESTART),
+        (pygame.K_m, Key.TOGGLE_MUSIC),
+        (pygame.K_n, Key.TOGGLE_SOUND),
     ],
 )
 def test_key_map(pygame_key, key):

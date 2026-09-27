@@ -21,6 +21,7 @@ PREVIEW_CELLS = 4
 # (label, y of the label); each value is drawn 30 px below its label.
 COUNTER_LABELS = (("SCORE", 220), ("LINES", 300), ("LEVEL", 380))
 VALUE_OFFSET_Y = 30
+MUSIC_Y, SOUND_Y = 470, 500
 
 Color = tuple[int, int, int]
 Rect = tuple[int, int, int, int]
@@ -65,7 +66,13 @@ def panel_texts(controller: Controller) -> list[tuple[str, tuple[int, int]]]:
     for (label, y), value in zip(COUNTER_LABELS, values):
         texts.append((label, (PANEL_X, y)))
         texts.append((str(value), (PANEL_X, y + VALUE_OFFSET_Y)))
+    texts.append((f"MUSIC {_on_off(controller.music_on)}", (PANEL_X, MUSIC_Y)))
+    texts.append((f"SOUND {_on_off(controller.sound_on)}", (PANEL_X, SOUND_Y)))
     return texts
+
+
+def _on_off(flag: bool) -> str:
+    return "ON" if flag else "OFF"
 
 
 def overlay_lines(controller: Controller) -> list[tuple[str, Color]]:

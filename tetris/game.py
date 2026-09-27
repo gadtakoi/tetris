@@ -55,6 +55,7 @@ class Game:
         self.lines = 0
         self.level = 0
         self.last_cleared = 0  # lines removed by the most recent lock
+        self.pieces_locked = 0
         self._gravity_time = 0  # accumulated time, in 1/60 ms
         self.active = ActivePiece.spawn(self._randomizer.next())
         self.next_type = self._randomizer.next()
@@ -138,6 +139,7 @@ class Game:
         return True
 
     def _lock(self) -> None:
+        self.pieces_locked += 1
         self.board.place(self.active.cells(), self.active.type)
         cleared = self.board.clear_full_rows()
         self.last_cleared = cleared
