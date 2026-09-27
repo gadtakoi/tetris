@@ -9,6 +9,7 @@ VOLUME_STEP = 10
 MIN_VOLUME = 0
 MAX_VOLUME = 100
 DEFAULT_VOLUME = 50
+DEFAULT_SFX_VOLUME = 100
 FORMAT_VERSION = 1
 
 
@@ -26,21 +27,30 @@ def _is_volume(value: object) -> bool:
     )
 
 
+def _step_volume(volume: int, steps: int) -> int:
+    """A volume moved by `steps` steps of VOLUME_STEP, kept within MIN_VOLUME..MAX_VOLUME."""
+    return max(MIN_VOLUME, min(MAX_VOLUME, volume + steps * VOLUME_STEP))
+
+
 @dataclass(frozen=True)
 class Settings:
     """What the player chose for sound; the defaults apply on first launch.
 
-    music_volume is a percentage from 0 to 100 in steps of VOLUME_STEP.
+    music_volume and sfx_volume are percentages from 0 to 100 in steps of VOLUME_STEP.
     """
 
     music_on: bool = True
     sound_on: bool = True
     music_volume: int = DEFAULT_VOLUME
+    sfx_volume: int = DEFAULT_SFX_VOLUME
 
     def with_volume_step(self, steps: int) -> Settings:
         """Settings with the music volume moved by `steps` steps, kept within 0..100."""
-        volume = self.music_volume + steps * VOLUME_STEP
-        return replace(self, music_volume=max(MIN_VOLUME, min(MAX_VOLUME, volume)))
+        return replace(self, music_volume=_step_volume(self.music_volume, steps))
+
+    def with_sfx_volume_step(self, steps: int) -> Settings:
+        """Settings with the effects volume moved by `steps` steps, kept within 0..100."""
+        return replace(self, sfx_volume=_step_volume(self.sfx_volume, steps))
 
     def to_json(self) -> str:
         """The settings as the JSON text stored in settings.json."""
@@ -50,6 +60,7 @@ class Settings:
                 "music_on": self.music_on,
                 "sound_on": self.sound_on,
                 "music_volume": self.music_volume,
+                "sfx_volume": self.sfx_volume,
             },
             indent=2,
         )
@@ -71,8 +82,10 @@ class Settings:
         music_on = data.get("music_on")
         sound_on = data.get("sound_on")
         volume = data.get("music_volume")
+        sfx_volume = data.get("sfx_volume")
         return cls(
             music_on=music_on if _is_bool(music_on) else defaults.music_on,
             sound_on=sound_on if _is_bool(sound_on) else defaults.sound_on,
             music_volume=volume if _is_volume(volume) else defaults.music_volume,
+            sfx_volume=sfx_volume if _is_volume(sfx_volume) else defaults.sfx_volume,
         )

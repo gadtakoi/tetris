@@ -33,6 +33,10 @@ KEY_MAP: dict[int, Key] = {
     pygame.K_EQUALS: Key.VOLUME_UP,  # the "+" key without Shift
     pygame.K_PLUS: Key.VOLUME_UP,
     pygame.K_KP_PLUS: Key.VOLUME_UP,
+    pygame.K_9: Key.SFX_DOWN,  # digits are the same in every keyboard layout
+    pygame.K_KP9: Key.SFX_DOWN,
+    pygame.K_0: Key.SFX_UP,
+    pygame.K_KP0: Key.SFX_UP,
     pygame.K_F1: Key.HELP,
 }
 

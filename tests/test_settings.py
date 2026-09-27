@@ -17,7 +17,7 @@ def settings_json(**fields) -> str:
 
 
 def test_defaults():
-    assert Settings() == Settings(music_on=True, sound_on=True, music_volume=50)
+    assert Settings() == Settings(music_on=True, sound_on=True, music_volume=50, sfx_volume=100)
 
 
 def test_volume_steps_and_bounds():
@@ -65,3 +65,34 @@ def test_settings_module_does_not_import_pygame():
         [sys.executable, "-c", code], cwd=PROJECT_ROOT, capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
+
+
+# --- Effects volume --------------------------------------------------------
+
+
+def test_effects_volume_steps_and_bounds():
+    assert Settings().with_sfx_volume_step(-1).sfx_volume == 90
+    assert Settings().with_sfx_volume_step(1).sfx_volume == 100
+    assert Settings(sfx_volume=0).with_sfx_volume_step(-1).sfx_volume == 0
+    assert Settings().with_sfx_volume_step(-1).music_volume == 50  # music untouched
+
+
+def test_file_without_effects_volume_gives_100():
+    text = settings_json(music_on=False, music_volume=55)  # no sfx_volume at all
+    assert Settings.from_json(text) == Settings(music_on=False, music_volume=50, sfx_volume=100)
+
+
+@pytest.mark.parametrize("volume", ["abc", -10, 110, 55, True])
+def test_invalid_effects_volume_falls_back_alone(volume):
+    loaded = Settings.from_json(settings_json(music_volume=30, sfx_volume=volume))
+    assert loaded == Settings(music_volume=30, sfx_volume=100)
+
+
+def test_effects_volume_round_trip():
+    settings = Settings(sfx_volume=40)
+    assert Settings.from_json(settings.to_json()) == settings
+
+
+def test_unknown_fields_are_ignored():
+    text = settings_json(sfx_volume=70, language="ru")
+    assert Settings.from_json(text).sfx_volume == 70

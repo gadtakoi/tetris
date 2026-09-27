@@ -377,7 +377,7 @@ def test_texts_during_play():
     controller.game.score, controller.game.lines, controller.game.level = 1200, 13, 1
     assert screen_texts(controller) == [
         "NEXT", "HOLD", "SCORE", "1200", "LINES", "13", "LEVEL", "1",
-        "MUSIC ON", "VOLUME 50%", "SOUND ON",
+        "MUSIC ON", "MUSIC 50%", "SOUND ON", "SOUND 100%",
     ]
 
 
@@ -391,7 +391,7 @@ def test_sound_indicators():
 def test_indicators_sit_below_the_counters():
     from tetris_ui.layout import panel_texts
     positions = dict(panel_texts(Controller(Game(seed=1))))
-    for text in ("MUSIC ON", "VOLUME 50%", "SOUND ON"):
+    for text in ("MUSIC ON", "MUSIC 50%", "SOUND ON", "SOUND 100%"):
         assert positions[text][1] >= 460
 
 
@@ -399,7 +399,7 @@ def test_volume_on_the_panel():
     controller = Controller(Game(seed=1))
     controller.key_down(Key.VOLUME_UP)
     controller.key_down(Key.VOLUME_UP)
-    assert "VOLUME 70%" in screen_texts(controller)
+    assert "MUSIC 70%" in screen_texts(controller)
 
 
 def test_texts_on_pause():
@@ -918,3 +918,53 @@ def test_hold_is_ignored_on_pause(controller, game):
     controller.key_down(Key.PAUSE)
     controller.key_down(Key.HOLD)
     assert game.calls == []
+
+
+# --- Effects volume keys ---------------------------------------------------
+
+
+def test_nine_makes_effects_quieter():
+    controller = Controller(FakeGame())
+    controller.key_down(Key.SFX_DOWN)
+    assert controller.settings.sfx_volume == 90
+
+
+def test_effects_volume_stops_at_100():
+    controller = Controller(FakeGame())
+    controller.key_down(Key.SFX_UP)
+    assert controller.settings.sfx_volume == 100
+
+
+def test_effects_volume_stops_at_0():
+    controller = Controller(FakeGame(), settings=Settings(sfx_volume=0))
+    controller.key_down(Key.SFX_DOWN)
+    assert controller.settings.sfx_volume == 0
+
+
+def test_digits_are_typed_during_name_entry():
+    controller = Controller(record_game())
+    controller.key_down(Key.SFX_DOWN)
+    controller.text_input("9")
+    assert controller.name == "9"
+    assert controller.settings.sfx_volume == 100
+
+
+def test_effects_volume_keys_send_no_command_and_keep_pause(controller, game):
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.SFX_DOWN)
+    assert controller.paused
+    assert game.calls == []
+
+
+def test_effects_volume_on_the_panel():
+    controller = Controller(Game(seed=1))
+    for _ in range(3):
+        controller.key_down(Key.SFX_DOWN)
+    assert "SOUND 70%" in screen_texts(controller)
+
+
+def test_effects_volume_change_is_reported():
+    reported = []
+    controller = Controller(FakeGame(), on_settings_change=reported.append)
+    controller.key_down(Key.SFX_DOWN)
+    assert reported == [Settings(sfx_volume=90)]

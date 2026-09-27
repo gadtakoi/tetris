@@ -44,9 +44,13 @@ def audio(pcm):
 class RecordingSound:
     def __init__(self) -> None:
         self.plays = 0
+        self.volume = 1.0
 
     def play(self) -> None:
         self.plays += 1
+
+    def set_volume(self, volume: float) -> None:
+        self.volume = volume
 
 
 def controller_with(*pieces: PieceType) -> Controller:
@@ -185,3 +189,24 @@ def test_effects_ignore_music_volume(audio, monkeypatch):
     controller.key_down(Key.LEFT)
     audio.sync(controller)
     assert recorders[Sound.MOVE].plays == 1
+
+
+# --- Effects volume --------------------------------------------------------
+
+
+def test_default_effects_volume(audio):
+    audio.sync(controller_with(PieceType.O))
+    for effect in audio._effects.values():
+        assert effect.get_volume() == pytest.approx(1.0, abs=MIXER_STEP)
+
+
+def test_quieter_effects_leave_the_music_alone(audio):
+    controller = controller_with(PieceType.O)
+    audio.sync(controller)
+    music_volume = pygame.mixer.Channel(0).get_volume()
+    for _ in range(3):
+        controller.key_down(Key.SFX_DOWN)
+    audio.sync(controller)
+    for effect in audio._effects.values():
+        assert effect.get_volume() == pytest.approx(0.7, abs=MIXER_STEP)
+    assert pygame.mixer.Channel(0).get_volume() == music_volume

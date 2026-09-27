@@ -37,6 +37,7 @@ class Audio:
         pygame.mixer.set_reserved(1)  # effects never steal the music channel
         self._channel = pygame.mixer.Channel(MUSIC_CHANNEL)
         self._volume: float | None = None  # music channel volume last applied
+        self._sfx_volume: float | None = None  # effects volume last applied
         self._generation: int | None = None  # music generation now loaded on the channel
         self._paused = False
 
@@ -63,6 +64,11 @@ class Audio:
     def sync(self, controller: Controller) -> None:
         """Play this frame's effects and bring the music in line with the controller."""
         sounds = controller.drain_sounds()
+        sfx_volume = controller.settings.sfx_volume / 100
+        if sfx_volume != self._sfx_volume:  # a Sound keeps its volume between plays
+            for effect in self._effects.values():
+                effect.set_volume(sfx_volume)
+            self._sfx_volume = sfx_volume
         if controller.sound_on:
             for sound in sounds:
                 self._effects[sound].play()

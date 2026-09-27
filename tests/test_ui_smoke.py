@@ -15,6 +15,7 @@ from tetris.game import ActivePiece, Game  # noqa: E402
 from tetris.pieces import PieceType  # noqa: E402
 from tetris_ui import app, layout, render  # noqa: E402
 from tetris_ui.input import Controller, Key, Phase  # noqa: E402
+from tetris_ui.settings import Settings  # noqa: E402
 
 VISIBLE_CELLS = [(c, r) for r in range(HIDDEN_ROWS, HEIGHT) for c in range(WIDTH)]
 
@@ -255,6 +256,10 @@ def test_quit_event_ends_main_early(data_dir):
         (pygame.K_EQUALS, Key.VOLUME_UP),
         (pygame.K_PLUS, Key.VOLUME_UP),
         (pygame.K_KP_PLUS, Key.VOLUME_UP),
+        (pygame.K_9, Key.SFX_DOWN),
+        (pygame.K_KP9, Key.SFX_DOWN),
+        (pygame.K_0, Key.SFX_UP),
+        (pygame.K_KP0, Key.SFX_UP),
         (pygame.K_F1, Key.HELP),
     ],
 )
@@ -372,3 +377,20 @@ def test_app_starts_on_the_splash(data_dir):
     controller = app.create_controller()
     assert controller.phase is Phase.SPLASH
     assert layout.screen_texts(controller)[0] == "SEVA Tetris"
+
+
+def test_effects_volume_is_saved(data_dir):
+    controller = app.create_controller()
+    app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_9), controller)
+    saved = json.loads((data_dir / "settings.json").read_text(encoding="utf-8"))
+    assert saved["sfx_volume"] == 90
+    assert app.create_controller().settings.sfx_volume == 90
+
+
+def test_sound_indicators_fit_the_window():
+    controller = Controller(Game(seed=1), settings=Settings(music_on=False, sound_on=False,
+                                                           music_volume=100, sfx_volume=100))
+    fonts = render.make_fonts()
+    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    for text, (x, y) in layout.panel_texts(controller):
+        assert window.contains(pygame.Rect((x, y), fonts.small.size(text))), text

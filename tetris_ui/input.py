@@ -34,11 +34,20 @@ class Key(Enum):
     TOGGLE_SOUND = "toggle_sound"
     VOLUME_DOWN = "volume_down"
     VOLUME_UP = "volume_up"
+    SFX_DOWN = "sfx_down"
+    SFX_UP = "sfx_up"
     HELP = "help"
 
 
 # Keys that change the sound settings; they work everywhere except name entry.
-SETTINGS_KEYS = (Key.TOGGLE_MUSIC, Key.TOGGLE_SOUND, Key.VOLUME_DOWN, Key.VOLUME_UP)
+SETTINGS_KEYS = (
+    Key.TOGGLE_MUSIC,
+    Key.TOGGLE_SOUND,
+    Key.VOLUME_DOWN,
+    Key.VOLUME_UP,
+    Key.SFX_DOWN,
+    Key.SFX_UP,
+)
 
 
 class Sound(Enum):
@@ -320,6 +329,10 @@ class Controller:
             new = replace(old, music_on=not old.music_on)
         elif key is Key.VOLUME_UP:
             new = old.with_volume_step(1)
+        elif key is Key.SFX_UP:
+            new = old.with_sfx_volume_step(1)
+        elif key is Key.SFX_DOWN:
+            new = old.with_sfx_volume_step(-1)
         else:
             new = old.with_volume_step(-1)
         if new == old:

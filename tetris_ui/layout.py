@@ -24,7 +24,7 @@ HOLD_X, HOLD_Y = PANEL_X, 155
 # (label, y of the label); each value is drawn 30 px below its label.
 COUNTER_LABELS = (("SCORE", 235), ("LINES", 300), ("LEVEL", 365))
 VALUE_OFFSET_Y = 30
-MUSIC_Y, VOLUME_Y, SOUND_Y = 470, 500, 530
+MUSIC_Y, VOLUME_Y, SOUND_Y, SFX_VOLUME_Y = 470, 500, 530, 560
 
 # The key screen (splash and F1 help): hotkeys as (keys, action), all ASCII because
 # the built-in font has no arrow glyphs.
@@ -99,8 +99,9 @@ def panel_texts(controller: Controller) -> list[tuple[str, tuple[int, int]]]:
         texts.append((label, (PANEL_X, y)))
         texts.append((str(value), (PANEL_X, y + VALUE_OFFSET_Y)))
     texts.append((f"MUSIC {_on_off(controller.music_on)}", (PANEL_X, MUSIC_Y)))
-    texts.append((f"VOLUME {controller.music_volume}%", (PANEL_X, VOLUME_Y)))
+    texts.append((f"MUSIC {controller.music_volume}%", (PANEL_X, VOLUME_Y)))
     texts.append((f"SOUND {_on_off(controller.sound_on)}", (PANEL_X, SOUND_Y)))
+    texts.append((f"SOUND {controller.settings.sfx_volume}%", (PANEL_X, SFX_VOLUME_Y)))
     return texts
 
 
