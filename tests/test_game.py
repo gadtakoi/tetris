@@ -125,16 +125,54 @@ def test_rotate_on_empty_board():
     assert set(game.active.cells()) == {(4, 2), (4, 3), (5, 3), (4, 4)}
 
 
-def test_rotation_against_wall_is_rejected():
+def test_rotation_with_no_fitting_kick_is_rejected():
+    # Vertical I at the bottom of a one-column shaft: none of the five SRS positions fit.
     game = make_game(PieceType.I, PieceType.I)
-    game.step_down()
+    fill_rows(game, range(10, 22), range(1, 10))
+    game.active = ActivePiece(PieceType.I, 1, -2, 18)
+    assert set(game.active.cells()) == {(0, 18), (0, 19), (0, 20), (0, 21)}
+    before = game.active
+    assert not game.rotate_cw()
+    assert not game.rotate_ccw()
+    assert game.active == before
+
+
+def test_i_kicks_off_the_left_wall():
+    game = make_game(PieceType.I, PieceType.I)
     assert game.rotate_cw()
     while game.move_left():
         pass
-    assert {c for c, _ in game.active.cells()} == {0}
-    before = game.active
-    assert not game.rotate_cw()
-    assert game.active == before
+    assert set(game.active.cells()) == {(0, 1), (0, 2), (0, 3), (0, 4)}
+    assert game.rotate_cw()
+    assert game.active.rotation == 2
+    assert set(game.active.cells()) == {(0, 3), (1, 3), (2, 3), (3, 3)}
+
+
+def test_t_kicks_off_the_left_wall():
+    game = make_game(PieceType.T, PieceType.T)
+    assert game.rotate_cw()
+    while game.move_left():
+        pass
+    assert set(game.active.cells()) == {(0, 2), (0, 3), (1, 3), (0, 4)}
+    assert game.rotate_ccw()
+    assert game.active.rotation == 0
+    assert set(game.active.cells()) == {(1, 2), (0, 3), (1, 3), (2, 3)}
+
+
+def test_t_kicks_up_off_the_floor():
+    game = make_game(PieceType.T, PieceType.T)
+    game.active = game._dropped()
+    assert set(game.active.cells()) == {(4, 20), (3, 21), (4, 21), (5, 21)}
+    assert game.rotate_cw()
+    assert game.active.rotation == 1
+    assert set(game.active.cells()) == {(3, 19), (3, 20), (4, 20), (3, 21)}
+
+
+def test_o_rotation_does_not_move():
+    game = make_game(PieceType.O, PieceType.O)
+    cells = set(game.active.cells())
+    assert game.rotate_cw()
+    assert set(game.active.cells()) == cells
 
 
 def test_rotation_into_hidden_rows_is_allowed():

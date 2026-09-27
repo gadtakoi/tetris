@@ -8,7 +8,7 @@ from enum import Enum
 
 from tetris.board import Board, Cell
 from tetris.gravity import FRAMES_PER_SECOND, frames_per_row
-from tetris.pieces import ROTATION_COUNT, PieceType, shape_cells, spawn_position
+from tetris.pieces import ROTATION_COUNT, PieceType, kick_offsets, shape_cells, spawn_position
 from tetris.randomizer import Randomizer
 from tetris.scoring import level_for, points_for
 
@@ -154,9 +154,19 @@ class Game:
         return piece
 
     def _rotate(self, delta: int) -> bool:
-        """Turn the active piece by `delta` quarter turns clockwise if the result fits."""
-        rotation = (self.active.rotation + delta) % ROTATION_COUNT
-        return self._try(replace(self.active, rotation=rotation))
+        """Turn the active piece by `delta` quarter turns clockwise using SRS.
+
+        Tries the rotation in place, then each SRS kick in order, and keeps the
+        first position that fits; if none fits, nothing changes.
+        """
+        active = self.active
+        rotation = (active.rotation + delta) % ROTATION_COUNT
+        for dx, dy in kick_offsets(active.type, active.rotation, rotation):
+            # SRS offsets point up, board rows grow downward.
+            candidate = replace(active, rotation=rotation, col=active.col + dx, row=active.row - dy)
+            if self._try(candidate):
+                return True
+        return False
 
     def _fits(self, piece: ActivePiece) -> bool:
         """Whether every cell of the piece is inside the board and empty."""

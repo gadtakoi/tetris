@@ -3,6 +3,7 @@ import pytest
 from tetris.pieces import (
     ROTATION_COUNT,
     PieceType,
+    kick_offsets,
     shape_cells,
     spawn_position,
 )
@@ -74,3 +75,40 @@ def test_spawn_o():
 def test_spawned_pieces_occupy_top_two_visible_rows(piece_type):
     rows = {row for _, row in _board_cells(piece_type)}
     assert rows <= {2, 3}
+
+
+# --- SRS kick tables -------------------------------------------------------
+
+TRANSITIONS = [(0, 1), (1, 0), (1, 2), (2, 1), (2, 3), (3, 2), (3, 0), (0, 3)]
+
+
+@pytest.mark.parametrize("piece_type", [PieceType.I, PieceType.T])  # I table, JLSTZ table
+@pytest.mark.parametrize("transition", TRANSITIONS)
+def test_kicks_start_in_place_then_four_offsets(piece_type, transition):
+    offsets = kick_offsets(piece_type, *transition)
+    assert offsets[0] == (0, 0)
+    assert len(offsets) == 5
+
+
+@pytest.mark.parametrize("piece_type", [PieceType.I, PieceType.J, PieceType.L, PieceType.S, PieceType.T, PieceType.Z])
+@pytest.mark.parametrize("transition", TRANSITIONS)
+def test_reverse_rotation_negates_the_kicks(piece_type, transition):
+    forward = kick_offsets(piece_type, *transition)
+    backward = kick_offsets(piece_type, *reversed(transition))
+    assert backward == tuple((-dx, -dy) for dx, dy in forward)
+
+
+def test_jlstz_share_one_table():
+    for transition in TRANSITIONS:
+        tables = {kick_offsets(t, *transition) for t in (PieceType.J, PieceType.L, PieceType.S, PieceType.T, PieceType.Z)}
+        assert len(tables) == 1
+
+
+def test_o_never_kicks():
+    for transition in TRANSITIONS:
+        assert kick_offsets(PieceType.O, *transition) == ((0, 0),)
+
+
+def test_kick_values_match_the_srs_tables():
+    assert kick_offsets(PieceType.T, 0, 1) == ((0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2))
+    assert kick_offsets(PieceType.I, 1, 2) == ((0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1))

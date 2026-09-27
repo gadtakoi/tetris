@@ -75,3 +75,42 @@ def spawn_position(piece_type: PieceType) -> tuple[int, int]:
     """Return the (col, row) of the bounding box's top-left corner at spawn."""
     row = SPAWN_ROW_I if piece_type is PieceType.I else SPAWN_ROW
     return SPAWN_COL, row
+
+
+# SRS wall kicks: (from, to) orientation -> the four offsets tried after the
+# in-place rotation, as (dx, dy) in cells with dy pointing UP, as in the SRS tables.
+Offset = tuple[int, int]
+
+_JLSTZ_KICKS: dict[tuple[int, int], tuple[Offset, ...]] = {
+    (0, 1): ((-1, 0), (-1, 1), (0, -2), (-1, -2)),
+    (1, 0): ((1, 0), (1, -1), (0, 2), (1, 2)),
+    (1, 2): ((1, 0), (1, -1), (0, 2), (1, 2)),
+    (2, 1): ((-1, 0), (-1, 1), (0, -2), (-1, -2)),
+    (2, 3): ((1, 0), (1, 1), (0, -2), (1, -2)),
+    (3, 2): ((-1, 0), (-1, -1), (0, 2), (-1, 2)),
+    (3, 0): ((-1, 0), (-1, -1), (0, 2), (-1, 2)),
+    (0, 3): ((1, 0), (1, 1), (0, -2), (1, -2)),
+}
+
+_I_KICKS: dict[tuple[int, int], tuple[Offset, ...]] = {
+    (0, 1): ((-2, 0), (1, 0), (-2, -1), (1, 2)),
+    (1, 0): ((2, 0), (-1, 0), (2, 1), (-1, -2)),
+    (1, 2): ((-1, 0), (2, 0), (-1, 2), (2, -1)),
+    (2, 1): ((1, 0), (-2, 0), (1, -2), (-2, 1)),
+    (2, 3): ((2, 0), (-1, 0), (2, 1), (-1, -2)),
+    (3, 2): ((-2, 0), (1, 0), (-2, -1), (1, 2)),
+    (3, 0): ((1, 0), (-2, 0), (1, -2), (-2, 1)),
+    (0, 3): ((-1, 0), (2, 0), (-1, 2), (2, -1)),
+}
+
+
+def kick_offsets(piece_type: PieceType, from_rotation: int, to_rotation: int) -> tuple[Offset, ...]:
+    """Positions to try for a rotation: in place first, then the four SRS kicks.
+
+    Offsets are (dx, dy) with dy pointing up; O never kicks.
+    """
+    if piece_type is PieceType.O:
+        return ((0, 0),)
+    table = _I_KICKS if piece_type is PieceType.I else _JLSTZ_KICKS
+    key = (from_rotation % ROTATION_COUNT, to_rotation % ROTATION_COUNT)
+    return ((0, 0),) + table[key]
