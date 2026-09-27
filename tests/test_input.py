@@ -24,6 +24,8 @@ class FakeGame:
     def __init__(self) -> None:
         self.is_over = False
         self.score = self.lines = self.level = self.pieces_locked = 0
+        self.held_type = None
+        self.can_hold = True
         self.calls: list[str] = []
         self.ticks: list[int] = []
 
@@ -44,6 +46,9 @@ class FakeGame:
 
     def hard_drop(self):
         self.calls.append("hard_drop")
+
+    def hold(self):
+        self.calls.append("hold")
 
     def new_game(self):
         self.calls.append("new_game")
@@ -371,7 +376,7 @@ def test_texts_during_play():
     controller = Controller(Game(seed=1))
     controller.game.score, controller.game.lines, controller.game.level = 1200, 13, 1
     assert screen_texts(controller) == [
-        "NEXT", "SCORE", "1200", "LINES", "13", "LEVEL", "1",
+        "NEXT", "HOLD", "SCORE", "1200", "LINES", "13", "LEVEL", "1",
         "MUSIC ON", "VOLUME 50%", "SOUND ON",
     ]
 
@@ -878,3 +883,38 @@ def test_field_and_panel_return_after_help():
     assert key_screen(controller) is None
     assert "SCORE" in texts and "NEXT" in texts
     assert "SEVA Tetris" not in texts
+
+
+# --- Hold key --------------------------------------------------------------
+
+
+def test_c_then_shift_holds_twice(controller, game):
+    controller.key_down(Key.HOLD)  # C
+    controller.key_down(Key.HOLD)  # Shift
+    assert game.calls == ["hold", "hold"]
+
+
+def test_hold_is_not_repeated_while_held(controller, game):
+    controller.key_down(Key.HOLD)
+    frames(controller, 1000)
+    assert game.calls == ["hold"]
+
+
+def test_hold_makes_a_sound():
+    _, controller = real_controller(PieceType.T, PieceType.S, PieceType.Z)
+    controller.key_down(Key.HOLD)
+    assert controller.drain_sounds() == [Sound.HOLD]
+
+
+def test_rejected_hold_is_silent():
+    _, controller = real_controller(PieceType.T, PieceType.S, PieceType.Z)
+    controller.key_down(Key.HOLD)
+    controller.drain_sounds()
+    controller.key_down(Key.HOLD)
+    assert controller.drain_sounds() == []
+
+
+def test_hold_is_ignored_on_pause(controller, game):
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.HOLD)
+    assert game.calls == []

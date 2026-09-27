@@ -24,6 +24,7 @@ class Key(Enum):
     RIGHT = "right"
     DOWN = "down"
     HARD_DROP = "hard_drop"
+    HOLD = "hold"
     ROTATE_CW = "rotate_cw"
     ROTATE_CCW = "rotate_ccw"
     PAUSE = "pause"
@@ -50,6 +51,7 @@ class Sound(Enum):
     TETRIS = "tetris"
     LEVEL_UP = "level_up"
     GAME_OVER = "game_over"
+    HOLD = "hold"
 
 
 class Phase(Enum):
@@ -83,10 +85,13 @@ class GameLike(Protocol):
         """Rotate the active piece counterclockwise; truthy if it turned."""
 
     def step_down(self) -> object:
-        """Soft drop by one row, locking the piece if it cannot move."""
+        """Soft drop by one row; a lying piece is left to the lock delay."""
 
     def hard_drop(self) -> object:
         """Drop the active piece to the bottom and lock it."""
+
+    def hold(self) -> object:
+        """Put the active piece in the hold slot; truthy if it was allowed."""
 
     def tick(self, dt_ms: int) -> None:
         """Let dt_ms milliseconds of gravity pass."""
@@ -261,6 +266,8 @@ class Controller:
             self.game.step_down()
         elif key is Key.HARD_DROP:
             self.game.hard_drop()
+        elif key is Key.HOLD:
+            self._sound_if(self.game.hold(), Sound.HOLD)
         elif key is Key.ROTATE_CW:
             self._sound_if(self.game.rotate_cw(), Sound.ROTATE)
         elif key is Key.ROTATE_CCW:

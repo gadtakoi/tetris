@@ -55,7 +55,12 @@ def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
         for col, row in game.active.cells():
             if row >= HIDDEN_ROWS:
                 _draw_cell(surface, layout.cell_rect(col, row), game.active.type)
-    _draw_preview(surface, game.next_type)
+    _draw_preview(surface, game.next_type, layout.PREVIEW_X, layout.PREVIEW_Y,
+                  layout.PIECE_COLORS[game.next_type])
+    if game.held_type is not None:
+        held_color = (layout.PIECE_COLORS[game.held_type] if game.can_hold
+                      else layout.dimmed_color(game.held_type))
+        _draw_preview(surface, game.held_type, layout.HOLD_X, layout.HOLD_Y, held_color)
     for text, pos in layout.panel_texts(controller):
         surface.blit(fonts.small.render(text, True, layout.TEXT), pos)
     overlay = layout.overlay_lines(controller)
@@ -93,16 +98,12 @@ def _fill_ghost(surface: pygame.Surface, rect: layout.Rect, color: layout.Color)
     surface.fill(color, (x + 1, y + 1, w - 1, h - 1))
 
 
-def _draw_preview(surface: pygame.Surface, piece_type: PieceType) -> None:
-    """Draw the next piece in orientation 0 in the preview box."""
+def _draw_preview(
+    surface: pygame.Surface, piece_type: PieceType, x: int, y: int, color: layout.Color
+) -> None:
+    """Draw a piece in orientation 0 in a 4 x 2 cell preview box at (x, y)."""
     for r, c in shape_cells(piece_type, 0):
-        rect = (
-            layout.PREVIEW_X + c * layout.CELL,
-            layout.PREVIEW_Y + r * layout.CELL,
-            layout.CELL,
-            layout.CELL,
-        )
-        _draw_cell(surface, rect, piece_type)
+        _fill_cell(surface, (x + c * layout.CELL, y + r * layout.CELL, layout.CELL, layout.CELL), color)
 
 
 def _draw_key_screen(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:

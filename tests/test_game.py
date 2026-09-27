@@ -549,6 +549,93 @@ def test_time_in_one_chunk_or_many_gives_the_same_game():
     assert almost.pieces_locked == 0
 
 
+# --- Hold ------------------------------------------------------------------
+
+
+def test_first_hold_takes_the_next_piece():
+    game = make_game(PieceType.T, PieceType.S, PieceType.Z)
+    assert game.hold()
+    assert game.held_type is PieceType.T
+    assert game.active == ActivePiece.spawn(PieceType.S)
+    assert game.next_type is PieceType.Z
+
+
+def test_hold_swaps_with_the_slot():
+    game = make_game(PieceType.T, PieceType.S, PieceType.O, PieceType.Z)
+    assert game.hold()  # T to the slot, S comes in, next is O
+    game.hard_drop()  # S locks, O comes in, next is Z
+    assert game.active.type is PieceType.O
+    assert game.hold()
+    assert game.held_type is PieceType.O
+    assert game.active == ActivePiece.spawn(PieceType.T)
+    assert game.next_type is PieceType.Z  # a swap does not touch the next piece
+
+
+def test_hold_once_per_piece():
+    game = make_game(PieceType.T, PieceType.S, PieceType.Z)
+    assert game.hold()
+    before = (game.held_type, game.active, game.next_type)
+    assert not game.hold()
+    assert (game.held_type, game.active, game.next_type) == before
+
+
+def test_hold_is_back_after_a_lock():
+    game = make_game(PieceType.T, PieceType.S, PieceType.Z)
+    assert game.hold()
+    assert not game.can_hold
+    game.hard_drop()
+    assert game.can_hold
+
+
+def test_held_piece_comes_back_in_orientation_0():
+    game = make_game(PieceType.T, PieceType.S, PieceType.O)
+    assert game.rotate_cw()
+    assert game.hold()
+    game.hard_drop()
+    assert game.hold()
+    assert game.active == ActivePiece.spawn(PieceType.T)
+    assert game.active.rotation == 0
+
+
+def test_new_game_empties_the_slot():
+    game = make_game(PieceType.T, PieceType.S, PieceType.Z)
+    game.hold()
+    game.new_game()
+    assert game.held_type is None
+    assert game.can_hold
+
+
+def test_hold_scores_nothing_and_locks_nothing():
+    game = make_game(PieceType.T, PieceType.S, PieceType.Z)
+    game.hold()
+    assert (game.score, game.pieces_locked) == (0, 0)
+    assert occupied(game) == set()
+
+
+def test_hold_restarts_the_timers():
+    game = make_game(PieceType.T, PieceType.S, PieceType.Z)
+    game.tick(700)  # almost a gravity step
+    assert game.hold()
+    game.tick(799)
+    assert game.active == ActivePiece.spawn(PieceType.S)
+    game.tick(1)
+    assert game.active.row == ActivePiece.spawn(PieceType.S).row + 1
+
+
+def test_swap_into_a_blocked_spawn_ends_the_game():
+    game = make_game(PieceType.T, PieceType.S, PieceType.I, PieceType.Z)
+    assert game.hold()  # T held, S active
+    game.hard_drop()  # S locks, I active
+    game.board.place([(4, 2)], PieceType.Z)  # blocks the T's spawn cells
+    assert game.hold()
+    assert game.is_over
+
+
+def test_hold_after_game_over_is_rejected():
+    game = finished_game()
+    assert not game.hold()
+
+
 # --- Gravity ---------------------------------------------------------------
 
 T_SPAWN_CELLS = {(4, 2), (3, 3), (4, 3), (5, 3)}

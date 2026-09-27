@@ -16,10 +16,13 @@ FIELD_W, FIELD_H = WIDTH * CELL, VISIBLE_HEIGHT * CELL
 
 PANEL_X = 340
 NEXT_LABEL_Y = 20
-PREVIEW_X, PREVIEW_Y = PANEL_X, 60
-PREVIEW_CELLS = 4
+PREVIEW_X, PREVIEW_Y = PANEL_X, 50
+PREVIEW_CELLS = 4  # preview width in cells
+PREVIEW_ROWS = 2  # every piece fits two rows in orientation 0
+HOLD_LABEL_Y = 125
+HOLD_X, HOLD_Y = PANEL_X, 155
 # (label, y of the label); each value is drawn 30 px below its label.
-COUNTER_LABELS = (("SCORE", 220), ("LINES", 300), ("LEVEL", 380))
+COUNTER_LABELS = (("SCORE", 235), ("LINES", 300), ("LEVEL", 365))
 VALUE_OFFSET_Y = 30
 MUSIC_Y, VOLUME_Y, SOUND_Y = 470, 500, 530
 
@@ -74,6 +77,12 @@ def ghost_color(piece_type: PieceType) -> Color:
     return r // GHOST_DIVISOR, g // GHOST_DIVISOR, b // GHOST_DIVISOR
 
 
+def dimmed_color(piece_type: PieceType) -> Color:
+    """The piece color at half brightness, for a held piece that cannot be swapped now."""
+    r, g, b = PIECE_COLORS[piece_type]
+    return r // 2, g // 2, b // 2
+
+
 def cell_rect(col: int, row: int) -> Rect:
     """Pixel rect (x, y, w, h) of a visible board cell (rows 2-21)."""
     if not (0 <= col < WIDTH and HIDDEN_ROWS <= row < HEIGHT):
@@ -85,7 +94,7 @@ def panel_texts(controller: Controller) -> list[tuple[str, tuple[int, int]]]:
     """Side panel texts with their top-left positions."""
     game = controller.game
     values = (game.score, game.lines, game.level)
-    texts = [("NEXT", (PANEL_X, NEXT_LABEL_Y))]
+    texts = [("NEXT", (PANEL_X, NEXT_LABEL_Y)), ("HOLD", (PANEL_X, HOLD_LABEL_Y))]
     for (label, y), value in zip(COUNTER_LABELS, values):
         texts.append((label, (PANEL_X, y)))
         texts.append((str(value), (PANEL_X, y + VALUE_OFFSET_Y)))

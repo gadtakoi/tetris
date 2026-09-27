@@ -71,7 +71,8 @@ class Game:
         self.new_game()
 
     def new_game(self) -> None:
-        """Start over: empty board, counters at zero, a new bag, fresh active and next pieces."""
+        """Start over: empty board, counters at zero, a new bag, fresh active and next
+        pieces, an empty hold slot."""
         self._randomizer.reset()
         self.board = Board()
         self.is_over = False
@@ -83,6 +84,8 @@ class Game:
         self._gravity_time = 0  # accumulated time, in 1/60 ms
         self.active = ActivePiece.spawn(self._randomizer.next())
         self.next_type = self._randomizer.next()
+        self.held_type: PieceType | None = None  # the hold slot
+        self.can_hold = True  # hold may be used once per piece
         self._reset_lock_delay()
 
     def move_left(self) -> bool:
@@ -121,6 +124,26 @@ class Game:
         self.active = self._dropped()
         self._lock()
         return StepResult.LOCKED
+
+    def hold(self) -> bool:
+        """Put the active piece in the hold slot; return whether it was allowed.
+
+        An empty slot takes the active piece and the next piece comes in, as after a
+        lock; a full slot swaps with the active piece, and the next piece stays. The
+        incoming piece starts at its spawn position in orientation 0. Hold works once
+        per piece: it is allowed again after the active piece locks.
+        """
+        if self.is_over or not self.can_hold:
+            return False
+        current = self.active.type
+        if self.held_type is None:
+            self.held_type = current
+            self._spawn(self.next_type)
+        else:
+            self.held_type, incoming = current, self.held_type
+            self._bring_in(incoming)
+        self.can_hold = False
+        return True
 
     def ghost_cells(self) -> tuple[Cell, ...]:
         """Cells where the active piece would lock if dropped straight down."""
@@ -240,10 +263,16 @@ class Game:
         self.score += points_for(cleared, self.level)  # level before this lock
         self.lines += cleared
         self.level = level_for(self.lines)
+        self.can_hold = True
         self._spawn(self.next_type)
 
     def _spawn(self, piece_type: PieceType) -> None:
-        """Bring piece_type in at its spawn position and draw a new next piece.
+        """Bring piece_type in at its spawn position and draw a new next piece."""
+        if self._bring_in(piece_type):
+            self.next_type = self._randomizer.next()
+
+    def _bring_in(self, piece_type: PieceType) -> bool:
+        """Make piece_type the active piece at its spawn position; False on block out.
 
         Restarts the gravity interval and the lock delay. If the spawn cells are
         occupied the game is over (block out) and the active piece is left as it was.
@@ -252,7 +281,7 @@ class Game:
         piece = ActivePiece.spawn(piece_type)
         if not self._fits(piece):
             self.is_over = True  # block out
-            return
+            return False
         self.active = piece
-        self.next_type = self._randomizer.next()
         self._reset_lock_delay()
+        return True

@@ -81,21 +81,73 @@ def test_active_piece_color():
         assert center_color(surface, layout.cell_rect(*cell)) == (160, 0, 240)
 
 
+def preview_colors(surface, x: int, y: int) -> list[list[tuple[int, int, int]]]:
+    """Center colors of the 4 x 2 cells of a preview box."""
+    return [
+        [center_color(surface, (x + c * layout.CELL, y + r * layout.CELL, layout.CELL, layout.CELL))
+         for c in range(layout.PREVIEW_CELLS)]
+        for r in range(layout.PREVIEW_ROWS)
+    ]
+
+
 def test_next_piece_preview():
     game = Game(rng=ScriptedRng([PieceType.T, PieceType.I]))
     surface = draw_game(game)
     cyan = layout.PIECE_COLORS[PieceType.I]
-    for row in range(layout.PREVIEW_CELLS):
-        colors = [
-            center_color(
-                surface,
-                (layout.PREVIEW_X + col * layout.CELL, layout.PREVIEW_Y + row * layout.CELL,
-                 layout.CELL, layout.CELL),
-            )
-            for col in range(layout.PREVIEW_CELLS)
-        ]
-        # I in orientation 0 fills box row 1 only.
-        assert (colors == [cyan] * 4) == (row == 1)
+    rows = preview_colors(surface, layout.PREVIEW_X, layout.PREVIEW_Y)
+    assert rows[1] == [cyan] * 4  # I in orientation 0 fills box row 1 only
+    assert cyan not in rows[0]
+
+
+def t_shape(color) -> list[list]:
+    return [[None, color, None, None], [color, color, color, None]]
+
+
+def mask(rows, color) -> list[list]:
+    return [[cell if cell == color else None for cell in row] for row in rows]
+
+
+def test_held_piece_on_the_panel():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S, PieceType.Z]))
+    game.hold()
+    game.hard_drop()  # hold is allowed again
+    purple = layout.PIECE_COLORS[PieceType.T]
+    rows = preview_colors(draw_game(game), layout.HOLD_X, layout.HOLD_Y)
+    assert mask(rows, purple) == t_shape(purple)
+
+
+def test_held_piece_is_dimmed_while_hold_is_used():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S, PieceType.Z]))
+    game.hold()
+    assert layout.dimmed_color(PieceType.T) == (80, 0, 120)
+    rows = preview_colors(draw_game(game), layout.HOLD_X, layout.HOLD_Y)
+    assert mask(rows, (80, 0, 120)) == t_shape((80, 0, 120))
+
+
+def test_empty_hold_slot():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    rows = preview_colors(draw_game(game), layout.HOLD_X, layout.HOLD_Y)
+    piece_colors = set(layout.PIECE_COLORS.values())
+    assert not any(color in piece_colors for row in rows for color in row)
+    assert "HOLD" in layout.screen_texts(Controller(game))
+
+
+def test_panel_layout_fits():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    controller = Controller(game)
+    fonts = render.make_fonts()
+    texts = dict(layout.panel_texts(controller))
+    next_box = pygame.Rect(layout.PREVIEW_X, layout.PREVIEW_Y, 4 * layout.CELL, 2 * layout.CELL)
+    hold_box = pygame.Rect(layout.HOLD_X, layout.HOLD_Y, 4 * layout.CELL, 2 * layout.CELL)
+    assert not next_box.colliderect(hold_box)
+    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    for text, (x, y) in layout.panel_texts(controller):
+        rect = pygame.Rect((x, y), fonts.small.size(text))
+        assert window.contains(rect), text
+        assert not rect.colliderect(next_box) and not rect.colliderect(hold_box), text
+    for label in ("SCORE", "LINES", "LEVEL"):
+        value_bottom = texts[label][1] + layout.VALUE_OFFSET_Y + fonts.small.get_height()
+        assert value_bottom <= 460
 
 
 def test_ghost_of_t_piece():
@@ -186,6 +238,9 @@ def test_quit_event_ends_main_early(data_dir):
         (pygame.K_RIGHT, Key.RIGHT),
         (pygame.K_DOWN, Key.DOWN),
         (pygame.K_SPACE, Key.HARD_DROP),
+        (pygame.K_c, Key.HOLD),
+        (pygame.K_LSHIFT, Key.HOLD),
+        (pygame.K_RSHIFT, Key.HOLD),
         (pygame.K_UP, Key.ROTATE_CW),
         (pygame.K_x, Key.ROTATE_CW),
         (pygame.K_z, Key.ROTATE_CCW),

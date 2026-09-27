@@ -166,6 +166,11 @@ def effect_level_up() -> Samples:
     return _notes(["C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6"], 50, "triangle", 0.5)
 
 
+def effect_hold() -> Samples:
+    """Two quick falling notes for putting a piece on hold (120 ms)."""
+    return _notes(["G5", "D5"], 60, "square", 0.3)
+
+
 def effect_game_over() -> Samples:
     """A falling melody over a bass line when the game ends (1200 ms)."""
     lead = _notes(["E5", "D5", "C5", "B4", "A4", "E4"], 200, "square", 0.3)
@@ -181,4 +186,5 @@ EFFECTS = {
     "tetris": effect_tetris,
     "level_up": effect_level_up,
     "game_over": effect_game_over,
+    "hold": effect_hold,
 }
