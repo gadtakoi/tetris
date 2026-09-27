@@ -730,7 +730,7 @@ def test_menu_at_launch():
     texts = screen_texts(controller)
     assert texts == [
         "SEVA Tetris", "New game", "High scores", "Settings", "Controls", "Guide", "Quit",
-        "Up / Down - choose, Enter - select",
+        "Up / Down - choose, Enter - select", "v1.0.0",
     ]
     assert highlighted(controller) == ["New game"]
     assert "SCORE" not in texts and "NEXT" not in texts
@@ -1464,7 +1464,7 @@ def test_menu_in_russian():
     _, controller = menu_controller(settings=ru())
     assert screen_texts(controller) == [
         "SEVA Tetris", "Новая игра", "Рекорды", "Настройки", "Управление", "Инструкция",
-        "Выход", "Вверх / Вниз - выбор, Enter - открыть",
+        "Выход", "Вверх / Вниз - выбор, Enter - открыть", "v1.0.0",
     ]
 
 
@@ -1745,3 +1745,41 @@ def test_controls_screen_lists_f2():
     texts = screen_texts(controller)
     assert ("F2", "Guide") in list(zip(texts[1:-1:2], texts[2:-1:2]))
     assert len(texts) == 1 + 2 * 14 + 1
+
+
+# --- Game version in the main menu ---------------------------------------------
+
+
+def version_entries(controller: Controller) -> list[tuple]:
+    return [(text, pos, color)
+            for text, pos, role, color in full_screen_texts(controller) if role == "version"]
+
+
+def test_version_in_the_main_menu():
+    _, controller = menu_controller()
+    assert version_entries(controller) == [("v1.0.0", (510, 630), (130, 130, 140))]
+
+
+def test_version_is_the_same_in_russian():
+    _, controller = menu_controller(settings=ru())
+    assert version_entries(controller) == [("v1.0.0", (510, 630), (130, 130, 140))]
+
+
+@pytest.mark.parametrize("item", ["High scores", "Settings", "Controls", "Guide"])
+def test_no_version_on_the_menu_screens(item):
+    _, controller = menu_controller()
+    choose(controller, item)
+    assert "v1.0.0" not in screen_texts(controller)
+
+
+def test_no_version_in_a_game():
+    playing = Controller(Game(seed=1))
+    paused = Controller(Game(seed=1))
+    paused.key_down(Key.PAUSE)
+    helped = Controller(Game(seed=1))
+    helped.key_down(Key.HELP)
+    guided = Controller(Game(seed=1))
+    guided.key_down(Key.GUIDE)
+    for controller in (playing, paused, helped, guided, Controller(finished_game()),
+                       Controller(record_game())):
+        assert "v1.0.0" not in screen_texts(controller)

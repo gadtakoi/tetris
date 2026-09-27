@@ -55,7 +55,7 @@
 
 | Экран | Заголовок | Строки | Подсказка |
 |---|---|---|---|
-| Главное меню | «SEVA Tetris» крупным шрифтом, y = 120 | New game, High scores, Settings, Controls, Guide, Quit с y = 240, шаг 50 | «Up / Down - choose, Enter - select», y = 590 |
+| Главное меню | «SEVA Tetris» крупным шрифтом, y = 120 | New game, High scores, Settings, Controls, Guide, Quit с y = 240, шаг 50 | «Up / Down - choose, Enter - select», y = 590; в правом нижнем углу (угол надписи — точка (510, 630)) версия «v1.0.0» шрифтом 20 px цветом (130, 130, 140) — `layout.VERSION_TEXT` из `tetris_ui.__version__`, одинаковая на обоих языках |
 | High scores | «HIGH SCORES», y = 60 | «<место>. <имя> <очки>» или «No records yet» с y = 130, шаг 34 | «Press Enter or Esc to return», y = 590 |
 | Settings | «Settings», y = 60 | «<название>: <значение>» и «Back» с y = 130, шаг 45 | «Left / Right - change, Esc - back», y = 590 |
 | Controls и экран клавиш по F1 | «SEVA Tetris», y = 60 | 14 строк `layout.HOTKEYS` с y = 120, шаг 32; клавиши при x = 70 (жёлтым), действия при x = 270 | «Press Enter or Esc to return» или «Press F1 or Enter to return», y = 600 |
@@ -152,4 +152,4 @@
 
 ## Спецификации
 
-Точные требования и сценарии: [controls](../openspec/specs/controls/spec.md), [game-screen](../openspec/specs/game-screen/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md), [localization](../openspec/specs/localization/spec.md), [in-game-guide](../openspec/specs/in-game-guide/spec.md).
+Точные требования и сценарии: [controls](../openspec/specs/controls/spec.md), [game-screen](../openspec/specs/game-screen/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md), [localization](../openspec/specs/localization/spec.md), [in-game-guide](../openspec/specs/in-game-guide/spec.md), [game-version](../openspec/specs/game-version/spec.md).

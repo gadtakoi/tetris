@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from tetris.board import HIDDEN_ROWS, HEIGHT, VISIBLE_HEIGHT, WIDTH
 from tetris.pieces import PieceType
-from tetris_ui import guide, menus
+from tetris_ui import __version__, guide, menus
 from tetris_ui.input import Controller, Phase
 from tetris_ui.texts import music_volume_text, name_line, page_line, sound_volume_text, tr
 
@@ -56,6 +56,7 @@ NO_RECORDS = "No records yet"
 TABLE_HINTS = ("Enter - new game", "Esc - main menu")
 PAUSE_TITLE = "PAUSE"
 GUIDE_HINT = "Left / Right - page, Esc - close"
+VERSION_TEXT = f"v{__version__}"  # the same in both languages
 
 # Full-window screens; every y is a center, except rows of the key list (top edge).
 MENU_TITLE_Y = 120
@@ -77,6 +78,7 @@ GUIDE_LINE_STEP = 24
 GUIDE_PARAGRAPH_GAP = 8
 GUIDE_PAGE_Y = 575
 GUIDE_HINT_Y = 610
+VERSION_POS = (510, 630)  # bottom-right corner of the version in the main menu
 
 # Widths the texts must fit in; a text too wide for its font is drawn smaller.
 PANEL_W = WINDOW_SIZE[0] - PANEL_X  # side panel
@@ -103,6 +105,7 @@ GRID: Color = (40, 40, 48)
 BORDER: Color = (200, 200, 200)
 TEXT: Color = (230, 230, 230)
 HIGHLIGHT: Color = (240, 240, 0)
+VERSION_COLOR: Color = (130, 130, 140)  # muted, so the version does not compete with the items
 CELL_OUTLINE: Color = (20, 20, 20)
 OVERLAY_ALPHA = 160
 GHOST_DIVISOR = 8  # the ghost is the piece color at 1/8 brightness
@@ -244,7 +247,8 @@ def full_screen_texts(controller: Controller) -> list[ScreenText]:
     Roles: "title" (big font), "item" and "hint" are centered on their position; "key"
     and "action" (the two columns of the key list) start at it (left edge, top). The
     guide's "paragraph" texts all carry the top-left corner of its text area: render
-    wraps them and puts them one under another from there.
+    wraps them and puts them one under another from there. The main menu's "version"
+    ends at its position (bottom-right corner).
     """
     screen = full_screen(controller)
     if screen is None:
@@ -262,7 +266,8 @@ def _screen_texts(controller: Controller, screen: str) -> list[ScreenText]:
         texts = [(TITLE, (center_x, MENU_TITLE_Y), "title", TEXT)]
         items = _items(menus.MAIN_ITEMS, controller.menu_index, language)
         texts += _column(items, center_x, MENU_ITEMS_Y, MENU_ITEMS_STEP)
-        return texts + [(tr(MENU_HINT, language), (center_x, SCREEN_HINT_Y), "hint", TEXT)]
+        texts.append((tr(MENU_HINT, language), (center_x, SCREEN_HINT_Y), "hint", TEXT))
+        return texts + [(VERSION_TEXT, VERSION_POS, "version", VERSION_COLOR)]
     if screen == "scores":
         texts = [(tr(SCORES_TITLE, language), (center_x, SCREEN_TITLE_Y), "title", TEXT)]
         texts += _column(score_rows(controller), center_x, SCORES_ROWS_Y, SCORES_ROWS_STEP)

@@ -400,6 +400,8 @@ def test_full_screen_texts_fit_the_window(screen, language):
         assert rect.width <= width, text
         if role in ("key", "action"):
             rect.topleft = pos
+        elif role == "version":
+            rect.bottomright = pos
         else:
             rect.center = pos
         assert window.contains(rect), text
@@ -676,3 +678,26 @@ def test_every_character_is_in_the_font(language):
     controller = Controller(Game(seed=1), settings=Settings(language=language))
     chars = set("".join(layout.all_screen_texts(controller))) - {" "}
     assert [char for char in sorted(chars) if glyph(font, char) == missing] == []
+
+
+# --- Game version in the main menu ---------------------------------------------
+
+
+def test_version_label_in_the_menu():
+    controller = controller_on("menu")
+    fonts = render.make_fonts()
+    texts = layout.full_screen_texts(controller)
+    ((text, pos, _, _),) = [entry for entry in texts if entry[2] == "version"]
+    rect = fitted_rect(fonts, render.screen_font_size("version"), text,
+                       layout.screen_text_width("version"))
+    rect.bottomright = pos
+    assert pygame.Rect((0, 0), layout.WINDOW_SIZE).contains(rect)
+    assert rect.left > 260
+    hint = next(centered_rect(fonts, role, t, p) for t, p, role, _ in texts if role == "hint")
+    assert rect.top >= hint.bottom  # below the hint
+    items = [centered_rect(fonts, role, t, p) for t, p, role, _ in texts if role == "item"]
+    assert rect.collidelist(items) == -1
+    surface = draw_game(controller.game, controller)
+    colors = {tuple(surface.get_at((x, y)))[:3]
+              for x in range(rect.left, rect.right) for y in range(rect.top, rect.bottom)}
+    assert layout.VERSION_COLOR in colors  # drawn, in its muted color

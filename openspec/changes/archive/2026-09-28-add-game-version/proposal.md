@@ -37,7 +37,7 @@
 
 - `tetris_ui/__init__.py`: константа `__version__` — единственное место, где задан номер.
 - `tetris_ui/layout.py` и `tetris_ui/render.py`: надпись версии в главном меню.
-- `build_exe.py`: файл ресурса версии для PyInstaller (`--version-file`).
+- `build_exe.py` и новый `version_info.txt` в корне проекта (хранится в git): ресурс версии для PyInstaller (`--version-file`). Сборка обновляет файл из `tetris_ui.__version__`.
 - Тесты:
   - `tests/test_version.py` (новый): формат номера и текст ресурса версии;
   - `test_input.py` и `test_ui_smoke.py`: надпись в меню;

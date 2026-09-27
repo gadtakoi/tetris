@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from tetris_ui import __version__
+from tetris_ui.layout import VERSION_TEXT
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 EXE_NAME = "SEVA Tetris.exe"
 
@@ -17,7 +20,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_built_exe_runs_standalone(tmp_path):
+@pytest.fixture(scope="module")
+def built_exe() -> Path:
+    """Build the exe once for this module; the build also removes a stale tetris.exe."""
     stale = PROJECT_ROOT / "dist" / "tetris.exe"  # as if left by a build before the rename
     stale.parent.mkdir(exist_ok=True)
     stale.write_bytes(b"")
@@ -29,10 +34,13 @@ def test_built_exe_runs_standalone(tmp_path):
     built = PROJECT_ROOT / "dist" / EXE_NAME
     assert built.is_file()
     assert not stale.exists()
+    return built
 
+
+def test_built_exe_runs_standalone(built_exe, tmp_path):
     exe_dir = tmp_path / "exe"
     exe_dir.mkdir()
-    exe = Path(shutil.copy2(built, exe_dir / EXE_NAME))
+    exe = Path(shutil.copy2(built_exe, exe_dir / EXE_NAME))
     env = dict(
         os.environ,
         SDL_VIDEODRIVER="dummy",
@@ -45,3 +53,20 @@ def test_built_exe_runs_standalone(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert [p.name for p in exe_dir.iterdir()] == [EXE_NAME]
+
+
+def test_built_exe_has_the_version(built_exe):
+    script = (
+        f"$v = (Get-Item -LiteralPath '{built_exe}').VersionInfo; "
+        "$v.FileVersion; $v.ProductVersion; $v.ProductName; $v.OriginalFilename; "
+        "$v.FileDescription"
+    )
+    info = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert info.returncode == 0, info.stderr
+    file_version, product_version, product, original, description = info.stdout.splitlines()
+    assert (file_version, product_version) == (f"{__version__}.0", __version__)
+    assert (product, original, description) == ("SEVA Tetris", EXE_NAME, "SEVA Tetris")
+    assert f"v{product_version}" == VERSION_TEXT  # the main menu shows the same number

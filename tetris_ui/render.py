@@ -15,6 +15,7 @@ SMALL_FONT_SIZE = 32
 BIG_FONT_SIZE = 56
 TABLE_FONT_SIZE = 26
 GUIDE_FONT_SIZE = TABLE_FONT_SIZE  # the guide's paragraphs
+VERSION_FONT_SIZE = 20  # the version in the main menu
 TABLE_LINE_STEP = 28
 FONT_SIZE_STEP = 2  # how much smaller each try is when a text does not fit
 
@@ -67,6 +68,8 @@ def screen_font_size(role: str) -> int:
     """The base font size of a full-window screen text with this role."""
     if role == "paragraph":
         return GUIDE_FONT_SIZE
+    if role == "version":
+        return VERSION_FONT_SIZE
     return BIG_FONT_SIZE if role == "title" else SMALL_FONT_SIZE
 
 
@@ -190,6 +193,8 @@ def _draw_full_screen(surface: pygame.Surface, controller: Controller, fonts: Fo
         image = font.render(text, True, color)
         if role in ("key", "action"):
             surface.blit(image, pos)
+        elif role == "version":
+            surface.blit(image, image.get_rect(bottomright=pos))
         else:
             surface.blit(image, image.get_rect(center=pos))
     paragraphs = [(text, pos, color) for text, pos, role, color in texts if role == "paragraph"]

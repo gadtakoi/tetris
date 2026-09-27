@@ -34,6 +34,7 @@ docs/            эта документация
 openspec/        спецификации (specs/) и история изменений (changes/archive/)
 build_exe.py     сборка exe через PyInstaller
 launcher.py      точка входа exe
+version_info.txt ресурс версии exe (обновляет build_exe.py из tetris_ui.__version__)
 ```
 
 ## Документация и спецификации
