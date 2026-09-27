@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from tetris_ui.texts import RU, music_volume_text, name_line, sound_volume_text, tr
+from tetris_ui.texts import (
+    RU,
+    music_volume_text,
+    name_line,
+    page_line,
+    sound_volume_text,
+    tr,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -36,10 +43,17 @@ SPEC_PAIRS = [
     ('Settings', 'Настройки'),
     ('Controls', 'Управление'),
     ('Quit', 'Выход'),
+    ('Guide', 'Инструкция'),
     ('Up / Down - choose, Enter - select', 'Вверх / Вниз - выбор, Enter - открыть'),
     ('Press Enter or Esc to return', 'Enter или Esc - назад'),
     ('Press F1 or Enter to return', 'F1 или Enter - назад'),
     ('Left / Right - change, Esc - back', 'Влево / Вправо - изменить, Esc - назад'),
+    ('Menu and pause', 'Меню и пауза'),
+    ('How to play', 'Как играть'),
+    ('Tips', 'Приёмы'),
+    ('Settings and sound', 'Настройки и звук'),
+    ('Page <n> / <m>', 'Страница <n> / <m>'),
+    ('Left / Right - page, Esc - close', 'Влево / Вправо - листать, Esc - закрыть'),
     ('Language', 'Язык'),
     ('Music', 'Музыка'),
     ('Music volume', 'Громкость музыки'),
@@ -107,6 +121,13 @@ def test_name_template():
     assert name_line("Ann", "en") == "Name: Ann_"
     assert name_line("Иван", "ru") == "Имя: Иван_"
     assert name_line("", "ru") == "Имя: _"
+
+
+def test_page_template():
+    assert page_line(2, 6, "en") == "Page 2 / 6"
+    assert page_line(1, 6, "ru") == "Страница 1 / 6"
+    template_pairs = [(en, ru) for en, ru in SPEC_PAIRS if en.startswith("Page ")]
+    assert template_pairs == [("Page <n> / <m>", "Страница <n> / <m>")]
 
 
 def test_texts_module_does_not_import_pygame():

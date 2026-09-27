@@ -4,7 +4,7 @@ from tests.helpers import ScriptedRng
 from tetris.game import Game
 from tetris.pieces import PieceType
 from tetris.highscores import Entry, HighScores
-from tetris_ui import menus
+from tetris_ui import guide, menus
 from tetris_ui.input import Controller, Key, KeyRepeater, Phase, Sound
 from tetris_ui.settings import Settings
 from tetris_ui.texts import RU
@@ -729,7 +729,7 @@ def test_menu_at_launch():
     assert full_screen(controller) == "menu"
     texts = screen_texts(controller)
     assert texts == [
-        "SEVA Tetris", "New game", "High scores", "Settings", "Controls", "Quit",
+        "SEVA Tetris", "New game", "High scores", "Settings", "Controls", "Guide", "Quit",
         "Up / Down - choose, Enter - select",
     ]
     assert highlighted(controller) == ["New game"]
@@ -1211,6 +1211,7 @@ SPEC_HOTKEYS = [
     ("C / Shift", "Hold"),
     ("P / Esc", "Pause"),
     ("F1", "Help"),
+    ("F2", "Guide"),
     ("M", "Music on/off"),
     ("- / +", "Music volume"),
     ("N", "Sound on/off"),
@@ -1225,8 +1226,8 @@ def test_key_table_layout():
     entries = full_screen_texts(controller)
     keys = [pos for _, pos, role, _ in entries if role == "key"]
     actions = [pos for _, pos, role, _ in entries if role == "action"]
-    assert keys == [(70, 120 + 34 * row) for row in range(13)]
-    assert actions == [(270, 120 + 34 * row) for row in range(13)]
+    assert keys == [(70, 120 + 32 * row) for row in range(14)]
+    assert actions == [(270, 120 + 32 * row) for row in range(14)]
     assert all(text.isascii() for text, _, _, _ in entries)
 
 
@@ -1417,7 +1418,8 @@ def test_key_list_in_russian():
     texts = screen_texts(controller)
     pairs = list(zip(texts[1:-1:2], texts[2:-1:2]))
     for pair in [("Влево / Вправо", "Сдвиг"), ("Пробел", "Жёсткое падение"),
-                 ("C / Shift", "Отложить"), ("9 / 0", "Громкость звука")]:
+                 ("C / Shift", "Отложить"), ("F2", "Инструкция"),
+                 ("9 / 0", "Громкость звука")]:
         assert pair in pairs
     assert texts[0] == "SEVA Tetris"
     assert texts[-1] == "Enter или Esc - назад"
@@ -1461,8 +1463,8 @@ def test_setting_values_in_russian(settings, line):
 def test_menu_in_russian():
     _, controller = menu_controller(settings=ru())
     assert screen_texts(controller) == [
-        "SEVA Tetris", "Новая игра", "Рекорды", "Настройки", "Управление", "Выход",
-        "Вверх / Вниз - выбор, Enter - открыть",
+        "SEVA Tetris", "Новая игра", "Рекорды", "Настройки", "Управление", "Инструкция",
+        "Выход", "Вверх / Вниз - выбор, Enter - открыть",
     ]
 
 
@@ -1482,3 +1484,264 @@ def test_english_texts_cover_every_screen():
     for text in ("NEXT", "PAUSE", "GAME OVER", "NEW RECORD", "New game", "Settings",
                  "Language: English", "Move", "Press F1 or Enter to return"):
         assert text in texts
+
+
+# --- Guide (F2): opening, paging and closing ---------------------------------
+
+
+def test_f2_opens_the_guide_during_play():
+    game, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.GUIDE)
+    assert controller.guide_open and controller.guide_page == 0
+    frames(controller, 5000)
+    controller.key_down(Key.LEFT)
+    assert set(game.active.cells()) == T_SPAWN  # neither moved nor fell
+    assert controller.music_state == "paused"
+
+
+def test_closing_the_guide_leaves_the_game_paused():
+    game, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.ESCAPE)
+    frames(controller, 800)
+    assert not controller.guide_open
+    assert controller.paused and controller.pause_index == 0
+    assert overlay_lines(controller)[:2] == [("PAUSE", TEXT), ("Continue", HIGHLIGHT)]
+    assert set(game.active.cells()) == T_SPAWN
+
+
+def test_guide_on_pause_returns_to_continue(controller):
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.DOWN)  # Main menu selected
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.RESTART)
+    assert not controller.guide_open
+    assert controller.phase is Phase.PLAYING
+    assert controller.paused and controller.pause_index == 0
+
+
+def test_guide_from_the_settings_screen_keeps_the_row():
+    _, controller, reported = settings_controller()
+    select_row(controller, "ghost")
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.RIGHT)  # turns a page, does not change Ghost
+    controller.key_down(Key.GUIDE)
+    assert controller.phase is Phase.SETTINGS
+    assert controller.settings_index == menus.SETTING_ROWS.index("ghost")
+    assert controller.settings.ghost and reported == []
+
+
+def test_f2_in_the_main_menu_returns_to_new_game():
+    _, controller = menu_controller()
+    controller.key_down(Key.DOWN)
+    controller.key_down(Key.DOWN)  # Settings
+    controller.key_down(Key.GUIDE)
+    assert controller.guide_open
+    controller.key_down(Key.ESCAPE)
+    assert controller.phase is Phase.MENU and not controller.guide_open
+    assert highlighted(controller) == ["New game"]
+
+
+@pytest.mark.parametrize("item", ["High scores", "Controls"])
+def test_guide_from_a_menu_screen_returns_to_it(item):
+    _, controller = menu_controller()
+    choose(controller, item)
+    phase = controller.phase
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.RESTART)  # closes the guide, does not leave the screen
+    assert controller.phase is phase and not controller.guide_open
+
+
+def test_f2_is_ignored_on_the_table():
+    controller = Controller(finished_game())
+    controller.key_down(Key.GUIDE)
+    assert not controller.guide_open
+    assert controller.phase is Phase.TABLE
+
+
+def test_f2_is_ignored_during_name_entry():
+    controller = Controller(record_game())
+    controller.text_input("Ann")
+    controller.key_down(Key.GUIDE)
+    assert not controller.guide_open
+    assert controller.phase is Phase.NAME_ENTRY and controller.name == "Ann"
+
+
+def test_f2_is_ignored_on_the_help_screen(controller):
+    controller.key_down(Key.HELP)
+    controller.key_down(Key.GUIDE)
+    assert controller.help_open and not controller.guide_open
+
+
+def test_other_keys_are_ignored_in_the_guide():
+    game, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.GUIDE)
+    for key in (Key.HARD_DROP, Key.PAUSE, Key.HELP, Key.HOLD, Key.UP, Key.DOWN, Key.BACKSPACE):
+        controller.key_down(key)
+    assert controller.guide_open and controller.guide_page == 0
+    assert not controller.help_open
+    assert set(game.active.cells()) == T_SPAWN and game.held_type is None
+
+
+def test_sound_keys_work_in_the_guide(controller):
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.TOGGLE_MUSIC)
+    controller.key_down(Key.SFX_DOWN)
+    assert controller.guide_open
+    assert not controller.music_on and controller.settings.sfx_volume == 90
+
+
+def test_guide_pages_turn():
+    _, controller = menu_controller()
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.RIGHT)
+    controller.key_down(Key.RIGHT)
+    assert controller.guide_page == 2
+    controller.key_down(Key.LEFT)
+    assert controller.guide_page == 1
+
+
+def test_guide_pages_stop_at_the_ends():
+    _, controller = menu_controller()
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.LEFT)
+    assert controller.guide_page == 0
+    for _ in range(10):
+        controller.key_down(Key.RIGHT)
+    assert controller.guide_page == 5
+
+
+def test_guide_always_opens_on_the_first_page():
+    _, controller = menu_controller()
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.RIGHT)
+    controller.key_down(Key.GUIDE)  # close
+    controller.key_down(Key.GUIDE)  # open again
+    assert controller.guide_page == 0
+
+
+def test_guide_item_in_the_main_menu():
+    game = FakeGame()
+    controller = Controller(game, start_in_menu=True)
+    choose(controller, "Guide")
+    assert controller.guide_open and controller.guide_page == 0
+    controller.key_down(Key.RESTART)  # closes the guide, starts nothing
+    assert controller.phase is Phase.MENU and not controller.guide_open
+    assert highlighted(controller) == ["New game"]
+    assert game.calls == []
+
+
+def test_no_music_under_the_guide_in_the_menu():
+    _, controller = menu_controller()
+    controller.key_down(Key.GUIDE)
+    assert controller.music_state == "stopped"
+
+
+def test_held_key_does_not_repeat_after_the_guide(controller, game):
+    controller.key_down(Key.LEFT)
+    controller.key_down(Key.GUIDE)
+    frames(controller, 1000)
+    controller.key_down(Key.ESCAPE)  # closes the guide: the game is still paused
+    controller.key_down(Key.PAUSE)  # continue
+    frames(controller, 500)
+    assert game.calls == ["left"]
+
+
+# --- Guide (F2): texts -------------------------------------------------------
+
+
+def guide_paragraphs(controller: Controller) -> list[str]:
+    return [text for text, _, role, _ in full_screen_texts(controller) if role == "paragraph"]
+
+
+def test_guide_first_page_texts():
+    _, controller = real_controller(PieceType.T, PieceType.T)
+    controller.key_down(Key.GUIDE)
+    texts = screen_texts(controller)
+    assert full_screen(controller) == "guide"
+    assert texts[0] == "Menu and pause"
+    assert texts[-2:] == ["Page 1 / 6", "Left / Right - page, Esc - close"]
+    assert guide_paragraphs(controller) == list(guide.paragraphs(0, "en"))
+    assert "SCORE" not in texts and "NEXT" not in texts
+    controller.key_down(Key.ESCAPE)
+    assert full_screen(controller) is None
+    assert "SCORE" in screen_texts(controller)
+
+
+def test_guide_titles_follow_the_page():
+    _, controller = menu_controller()
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.RIGHT)
+    controller.key_down(Key.RIGHT)
+    texts = screen_texts(controller)
+    assert texts[0] == "How to play" and "Page 3 / 6" in texts
+    controller.key_down(Key.LEFT)
+    texts = screen_texts(controller)
+    assert texts[0] == "Controls" and "Page 2 / 6" in texts
+
+
+def test_every_guide_page_title():
+    _, controller = menu_controller()
+    controller.key_down(Key.GUIDE)
+    titles = []
+    for _ in range(guide.PAGE_COUNT):
+        titles.append(screen_texts(controller)[0])
+        controller.key_down(Key.RIGHT)
+    assert titles == ["Menu and pause", "Controls", "How to play", "Tips",
+                      "Settings and sound", "High scores"]
+
+
+def test_guide_in_russian():
+    _, controller = menu_controller(settings=ru())
+    controller.key_down(Key.GUIDE)
+    texts = screen_texts(controller)
+    assert texts[0] == "Меню и пауза"
+    assert texts[-2:] == ["Страница 1 / 6", "Влево / Вправо - листать, Esc - закрыть"]
+    assert guide_paragraphs(controller) == list(guide.paragraphs(0, "ru"))
+
+
+def test_guide_titles_in_russian():
+    _, controller = menu_controller(settings=ru())
+    controller.key_down(Key.GUIDE)
+    titles = []
+    for _ in range(guide.PAGE_COUNT):
+        titles.append(screen_texts(controller)[0])
+        controller.key_down(Key.RIGHT)
+    assert titles == ["Меню и пауза", "Управление", "Как играть", "Приёмы",
+                      "Настройки и звук", "Рекорды"]
+
+
+def test_guide_controls_page():
+    _, controller = menu_controller()
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.RIGHT)
+    lines = guide_paragraphs(controller)
+    assert lines == [f"{keys}: {action}" for keys, action in SPEC_HOTKEYS]
+    assert len(lines) == 14
+    assert lines[0] == "Left / Right: Move" and lines[-1] == "Enter: Select / new game"
+    assert "F2: Guide" in lines
+
+
+def test_guide_controls_page_in_russian():
+    _, controller = menu_controller(settings=ru())
+    controller.key_down(Key.GUIDE)
+    controller.key_down(Key.RIGHT)
+    lines = guide_paragraphs(controller)
+    for line in ("Влево / Вправо: Сдвиг", "Пробел: Жёсткое падение", "F2: Инструкция",
+                 "Enter: Выбор / новая игра"):
+        assert line in lines
+
+
+def test_guide_item_shows_the_first_page():
+    _, controller = menu_controller()
+    choose(controller, "Guide")
+    texts = screen_texts(controller)
+    assert texts[0] == "Menu and pause" and "Page 1 / 6" in texts
+
+
+def test_controls_screen_lists_f2():
+    _, controller = menu_controller()
+    choose(controller, "Controls")
+    texts = screen_texts(controller)
+    assert ("F2", "Guide") in list(zip(texts[1:-1:2], texts[2:-1:2]))
+    assert len(texts) == 1 + 2 * 14 + 1

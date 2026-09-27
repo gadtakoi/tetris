@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from tetris.board import HIDDEN_ROWS, HEIGHT, VISIBLE_HEIGHT, WIDTH
 from tetris.pieces import PieceType
-from tetris_ui import menus
+from tetris_ui import guide, menus
 from tetris_ui.input import Controller, Phase
-from tetris_ui.texts import music_volume_text, name_line, sound_volume_text, tr
+from tetris_ui.texts import music_volume_text, name_line, page_line, sound_volume_text, tr
 
 WINDOW_SIZE = (520, 640)
 TITLE = "SEVA Tetris"
@@ -39,6 +39,7 @@ HOTKEYS: tuple[tuple[str, str], ...] = (
     ("C / Shift", "Hold"),
     ("P / Esc", "Pause"),
     ("F1", "Help"),
+    ("F2", "Guide"),
     ("M", "Music on/off"),
     ("- / +", "Music volume"),
     ("N", "Sound on/off"),
@@ -54,6 +55,7 @@ SCORES_TITLE = "HIGH SCORES"
 NO_RECORDS = "No records yet"
 TABLE_HINTS = ("Enter - new game", "Esc - main menu")
 PAUSE_TITLE = "PAUSE"
+GUIDE_HINT = "Left / Right - page, Esc - close"
 
 # Full-window screens; every y is a center, except rows of the key list (top edge).
 MENU_TITLE_Y = 120
@@ -62,10 +64,19 @@ SCREEN_TITLE_Y = 60  # high scores and settings
 SCORES_ROWS_Y, SCORES_ROWS_STEP = 130, 34
 SETTINGS_ROWS_Y, SETTINGS_ROWS_STEP = 130, 45
 KEY_SCREEN_TITLE_Y = 60
-KEY_TABLE_Y, KEY_TABLE_STEP = 120, 34  # top of the first row, row pitch
+KEY_TABLE_Y, KEY_TABLE_STEP = 120, 32  # top of the first row, row pitch
 KEY_COLUMN_X, ACTION_COLUMN_X = 70, 270  # left edges of the two columns
 SCREEN_HINT_Y = 590
 KEY_SCREEN_HINT_Y = 600
+# The guide: the title, then paragraphs from the top-left corner of the text area (render
+# wraps them at spaces into lines GUIDE_LINE_STEP apart, with an extra gap between
+# paragraphs), then the page number and the hint.
+GUIDE_TITLE_Y = 50
+GUIDE_TEXT_X, GUIDE_TEXT_Y = 20, 95
+GUIDE_LINE_STEP = 24
+GUIDE_PARAGRAPH_GAP = 8
+GUIDE_PAGE_Y = 575
+GUIDE_HINT_Y = 610
 
 # Widths the texts must fit in; a text too wide for its font is drawn smaller.
 PANEL_W = WINDOW_SIZE[0] - PANEL_X  # side panel
@@ -206,8 +217,11 @@ def overlay_texts(controller: Controller) -> list[str]:
 
 
 def full_screen(controller: Controller) -> str | None:
-    """Which screen covers the whole window: "menu", "scores", "settings", "controls",
-    "help" (the key list opened with F1) or None when the field is shown."""
+    """Which screen covers the whole window: "guide" (F2, over any other screen),
+    "menu", "scores", "settings", "controls", "help" (the key list opened with F1) or
+    None when the field is shown."""
+    if controller.guide_open:
+        return "guide"
     screen = {
         Phase.MENU: "menu",
         Phase.SCORES: "scores",
@@ -228,7 +242,9 @@ def full_screen_texts(controller: Controller) -> list[ScreenText]:
     is shown.
 
     Roles: "title" (big font), "item" and "hint" are centered on their position; "key"
-    and "action" (the two columns of the key list) start at it (left edge, top).
+    and "action" (the two columns of the key list) start at it (left edge, top). The
+    guide's "paragraph" texts all carry the top-left corner of its text area: render
+    wraps them and puts them one under another from there.
     """
     screen = full_screen(controller)
     if screen is None:
@@ -237,7 +253,9 @@ def full_screen_texts(controller: Controller) -> list[ScreenText]:
 
 
 def _screen_texts(controller: Controller, screen: str) -> list[ScreenText]:
-    """Texts of one of FULL_SCREENS for the controller's state and language."""
+    """Texts of one of FULL_SCREENS or "guide" for the controller's state and language."""
+    if screen == "guide":
+        return _guide_texts(controller, controller.guide_page)
     language = _language(controller)
     center_x = WINDOW_SIZE[0] // 2
     if screen == "menu":
@@ -272,6 +290,24 @@ def _setting_line(controller: Controller, row: str) -> str:
     return f"{tr(label, language)}: {tr(value, language)}"
 
 
+def _guide_texts(controller: Controller, page: int) -> list[ScreenText]:
+    """Texts of one guide page (0-based): the title, the paragraphs, the page number and
+    the hint. The Controls page lists the key list as "<keys>: <action>" lines."""
+    language = _language(controller)
+    center_x = WINDOW_SIZE[0] // 2
+    if page == guide.CONTROLS_PAGE:
+        paragraphs = [f"{tr(keys, language)}: {tr(action, language)}" for keys, action in HOTKEYS]
+    else:
+        paragraphs = list(guide.paragraphs(page, language))
+    title = tr(guide.PAGE_TITLES[page], language)
+    texts = [(title, (center_x, GUIDE_TITLE_Y), "title", TEXT)]
+    texts += [(text, (GUIDE_TEXT_X, GUIDE_TEXT_Y), "paragraph", TEXT) for text in paragraphs]
+    number = page_line(page + 1, guide.PAGE_COUNT, language)
+    texts.append((number, (center_x, GUIDE_PAGE_Y), "item", TEXT))
+    texts.append((tr(GUIDE_HINT, language), (center_x, GUIDE_HINT_Y), "hint", TEXT))
+    return texts
+
+
 def screen_text_width(role: str) -> int:
     """The width a full-window screen text of this role must fit in."""
     return {"key": KEY_COLUMN_W, "action": ACTION_COLUMN_W}.get(role, SCREEN_TEXT_W)
@@ -297,11 +333,14 @@ def screen_texts(controller: Controller) -> list[str]:
 
 def all_screen_texts(controller: Controller) -> list[str]:
     """The texts of every screen for the controller's settings, whatever is shown now:
-    the panel, the pause, name entry and table overlays, and all full-window screens."""
+    the panel, the pause, name entry and table overlays, all full-window screens and
+    every page of the guide."""
     texts = [text for text, _ in panel_texts(controller)]
     for lines in (_pause_lines(controller), _name_entry_lines(controller),
                   _table_lines(controller)):
         texts += [text for text, _ in lines]
     for screen in FULL_SCREENS:
         texts += [text for text, _, _, _ in _screen_texts(controller, screen)]
+    for page in range(guide.PAGE_COUNT):
+        texts += [text for text, _, _, _ in _guide_texts(controller, page)]
     return texts

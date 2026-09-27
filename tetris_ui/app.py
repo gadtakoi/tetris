@@ -38,6 +38,7 @@ KEY_MAP: dict[int, Key] = {
     pygame.K_0: Key.SFX_UP,
     pygame.K_KP0: Key.SFX_UP,
     pygame.K_F1: Key.HELP,
+    pygame.K_F2: Key.GUIDE,
 }
 
 

@@ -14,6 +14,7 @@ from tetris_ui.input import Controller, Phase
 SMALL_FONT_SIZE = 32
 BIG_FONT_SIZE = 56
 TABLE_FONT_SIZE = 26
+GUIDE_FONT_SIZE = TABLE_FONT_SIZE  # the guide's paragraphs
 TABLE_LINE_STEP = 28
 FONT_SIZE_STEP = 2  # how much smaller each try is when a text does not fit
 
@@ -64,7 +65,41 @@ def fitted_font(fonts: Fonts, base_size: int, text: str, max_width: int) -> pyga
 
 def screen_font_size(role: str) -> int:
     """The base font size of a full-window screen text with this role."""
+    if role == "paragraph":
+        return GUIDE_FONT_SIZE
     return BIG_FONT_SIZE if role == "title" else SMALL_FONT_SIZE
+
+
+def wrap_text(font: pygame.font.Font, text: str, width: int) -> list[str]:
+    """Break text into lines no wider than width at the spaces between words; a single
+    word wider than width gets a line of its own."""
+    lines: list[str] = []
+    line = ""
+    for word in text.split(" "):
+        candidate = f"{line} {word}" if line else word
+        if line and font.size(candidate)[0] > width:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    lines.append(line)
+    return lines
+
+
+def guide_lines(
+    fonts: Fonts, paragraphs: list[str], origin: tuple[int, int]
+) -> list[tuple[str, tuple[int, int]]]:
+    """The guide's paragraphs wrapped to the text width and placed one under another from
+    origin (top-left): (line, top-left position) for every line."""
+    font = fonts.sized(GUIDE_FONT_SIZE)
+    x, y = origin
+    lines = []
+    for paragraph in paragraphs:
+        for line in wrap_text(font, paragraph, layout.screen_text_width("paragraph")):
+            lines.append((line, (x, y)))
+            y += layout.GUIDE_LINE_STEP
+        y += layout.GUIDE_PARAGRAPH_GAP
+    return lines
 
 
 def draw(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
@@ -144,15 +179,25 @@ def _draw_preview(
 
 
 def _draw_full_screen(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
-    """Fill the window with the screen's title, lines and hint."""
+    """Fill the window with the screen's title, lines and hint; the guide's paragraphs are
+    wrapped and flowed down from the top of its text area."""
     surface.fill(layout.WINDOW_BG)
-    for text, pos, role, color in layout.full_screen_texts(controller):
+    texts = layout.full_screen_texts(controller)
+    for text, pos, role, color in texts:
+        if role == "paragraph":
+            continue
         font = fitted_font(fonts, screen_font_size(role), text, layout.screen_text_width(role))
         image = font.render(text, True, color)
         if role in ("key", "action"):
             surface.blit(image, pos)
         else:
             surface.blit(image, image.get_rect(center=pos))
+    paragraphs = [(text, pos, color) for text, pos, role, color in texts if role == "paragraph"]
+    if paragraphs:
+        font = fonts.sized(GUIDE_FONT_SIZE)
+        color = paragraphs[0][2]
+        for line, pos in guide_lines(fonts, [text for text, _, _ in paragraphs], paragraphs[0][1]):
+            surface.blit(font.render(line, True, color), pos)
 
 
 def _draw_overlay(

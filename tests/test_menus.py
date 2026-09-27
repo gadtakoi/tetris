@@ -11,7 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_menu_items():
-    assert menus.MAIN_ITEMS == ("New game", "High scores", "Settings", "Controls", "Quit")
+    assert menus.MAIN_ITEMS == (
+        "New game", "High scores", "Settings", "Controls", "Guide", "Quit",
+    )
     assert menus.PAUSE_ITEMS == ("Continue", "Main menu")
 
 

@@ -14,7 +14,7 @@ from tetris.board import HEIGHT, HIDDEN_ROWS, WIDTH  # noqa: E402
 from tetris.game import ActivePiece, Game  # noqa: E402
 from tetris.highscores import Entry, HighScores  # noqa: E402
 from tetris.pieces import PieceType  # noqa: E402
-from tetris_ui import app, layout, menus, render  # noqa: E402
+from tetris_ui import app, guide, layout, menus, render  # noqa: E402
 from tetris_ui.input import Controller, Key, Phase  # noqa: E402
 from tetris_ui.settings import Settings  # noqa: E402
 
@@ -269,6 +269,7 @@ def test_quit_event_ends_main_early(data_dir):
         (pygame.K_0, Key.SFX_UP),
         (pygame.K_KP0, Key.SFX_UP),
         (pygame.K_F1, Key.HELP),
+        (pygame.K_F2, Key.GUIDE),
     ],
 )
 def test_key_map(pygame_key, key):
@@ -587,3 +588,91 @@ def test_language_survives_a_restart(data_dir):
     screen = app.create_window()
     assert screen.get_size() == (520, 640)
     assert pygame.display.get_caption()[0] == "SEVA Tetris"
+
+
+# --- Guide (F2) ---------------------------------------------------------------
+
+GUIDE_LANGUAGES = ("en", "ru")
+
+
+def guide_controller(language: str, page: int) -> Controller:
+    """A game with the guide open on a page (0-based)."""
+    controller = Controller(Game(rng=ScriptedRng([PieceType.T, PieceType.S])),
+                            settings=Settings(language=language))
+    controller.key_down(Key.GUIDE)
+    for _ in range(page):
+        controller.key_down(Key.RIGHT)
+    assert controller.guide_page == page
+    return controller
+
+
+def centered_rect(fonts, role: str, text: str, pos) -> pygame.Rect:
+    base = render.screen_font_size(role)
+    rect = fitted_rect(fonts, base, text, layout.screen_text_width(role))
+    rect.center = pos
+    return rect
+
+
+def glyph(font, char: str):
+    image = font.render(char, True, (255, 255, 255), (0, 0, 0))
+    return image.get_size(), pygame.image.tobytes(image, "RGB")
+
+
+def test_wrap_text_by_words():
+    font = render.make_fonts().sized(render.GUIDE_FONT_SIZE)
+    paragraph = guide.paragraphs(0, "ru")[1]
+    assert font.size(paragraph)[0] > 480
+    lines = render.wrap_text(font, paragraph, 480)
+    assert len(lines) > 1
+    assert all(font.size(line)[0] <= 480 for line in lines)
+    assert " ".join(lines) == paragraph
+
+
+def test_long_word_gets_a_line_of_its_own():
+    font = render.make_fonts().sized(render.GUIDE_FONT_SIZE)
+    word = "Ш" * 60
+    assert render.wrap_text(font, f"a {word} b", 480) == ["a", word, "b"]
+
+
+@pytest.mark.parametrize("language", GUIDE_LANGUAGES)
+@pytest.mark.parametrize("page", range(guide.PAGE_COUNT))
+def test_guide_page_fits(language, page):
+    controller = guide_controller(language, page)
+    fonts = render.make_fonts()
+    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    texts = layout.full_screen_texts(controller)
+    title, number, hint = (centered_rect(fonts, role, text, pos)
+                           for text, pos, role, _ in texts if role != "paragraph")
+    for rect in (title, number, hint):
+        assert window.contains(rect)
+    assert number.bottom <= hint.top
+    paragraphs = [text for text, _, role, _ in texts if role == "paragraph"]
+    origin = next(pos for _, pos, role, _ in texts if role == "paragraph")
+    font = fonts.sized(render.GUIDE_FONT_SIZE)
+    bottom = title.bottom
+    for line, pos in render.guide_lines(fonts, paragraphs, origin):
+        rect = pygame.Rect(pos, font.size(line))
+        assert rect.left == 20 and rect.width <= 480, line
+        assert rect.top >= bottom, line  # below the title and the line before it
+        bottom = rect.bottom
+    assert bottom <= number.top  # the last line is above the page number
+
+
+@pytest.mark.parametrize("language", GUIDE_LANGUAGES)
+def test_guide_pages_render(language):
+    for page in range(guide.PAGE_COUNT):
+        controller = guide_controller(language, page)
+        surface = draw_game(controller.game, controller)
+        # Neither the field border (x = 18) nor its top-left cell is drawn; no text is there.
+        assert tuple(surface.get_at((18, 300)))[:3] == layout.WINDOW_BG
+        assert tuple(surface.get_at((35, 35)))[:3] == layout.WINDOW_BG
+
+
+@pytest.mark.parametrize("language", GUIDE_LANGUAGES)
+def test_every_character_is_in_the_font(language):
+    font = render.make_fonts().sized(render.GUIDE_FONT_SIZE)
+    missing = glyph(font, "")  # private use area: not in the font
+    assert glyph(font, "←") == missing  # the check does see a missing glyph
+    controller = Controller(Game(seed=1), settings=Settings(language=language))
+    chars = set("".join(layout.all_screen_texts(controller))) - {" "}
+    assert [char for char in sorted(chars) if glyph(font, char) == missing] == []

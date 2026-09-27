@@ -34,10 +34,17 @@ RU: dict[str, str] = {
     "Settings": "Настройки",
     "Controls": "Управление",
     "Quit": "Выход",
+    "Guide": "Инструкция",
     "Up / Down - choose, Enter - select": "Вверх / Вниз - выбор, Enter - открыть",
     "Press Enter or Esc to return": "Enter или Esc - назад",
     "Press F1 or Enter to return": "F1 или Enter - назад",
     "Left / Right - change, Esc - back": "Влево / Вправо - изменить, Esc - назад",
+    # the guide (F2): page titles and the hint
+    "Menu and pause": "Меню и пауза",
+    "How to play": "Как играть",
+    "Tips": "Приёмы",
+    "Settings and sound": "Настройки и звук",
+    "Left / Right - page, Esc - close": "Влево / Вправо - листать, Esc - закрыть",
     # settings rows and values
     "Language": "Язык",
     "Music": "Музыка",
@@ -94,3 +101,8 @@ def sound_volume_text(volume: int, language: str) -> str:
 def name_line(name: str, language: str) -> str:
     """The name being typed with a cursor: "Name: Ann_" or "Имя: Ann_"."""
     return f"{'Имя' if language == 'ru' else 'Name'}: {name}_"
+
+
+def page_line(page: int, total: int, language: str) -> str:
+    """The guide's page number: "Page 2 / 6" or "Страница 2 / 6"."""
+    return f"{'Страница' if language == 'ru' else 'Page'} {page} / {total}"

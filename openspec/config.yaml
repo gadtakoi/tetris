@@ -18,7 +18,7 @@ context: |
       файлового ввода-вывода, детерминированная и полностью тестируемая.
       Тест tests/test_architecture.py проверяет, что pygame сюда не попадает.
     - tetris_ui/ — слой представления: читает состояние логики и передаёт
-      ей команды; правил игры в нём нет. Модули input.py, menus.py, texts.py,
+      ей команды; правил игры в нём нет. Модули input.py, menus.py, texts.py, guide.py,
       layout.py, settings.py, synth.py, music.py — без pygame и тестируются
       напрямую; render.py,
       app.py, audio.py — pygame, проверяются дымовыми тестами с
@@ -29,7 +29,7 @@ context: |
     - Рекорды и настройки хранятся в %APPDATA%\tetris\ (highscores.json,
       settings.json; папка переопределяется переменной TETRIS_DATA_DIR).
     - Запуск: python -m tetris_ui (начинается с главного меню, F1 в партии —
-      список клавиш);
+      список клавиш, F2 — инструкция в игре);
       сборка одного "SEVA Tetris.exe": python build_exe.py
       (проверка сборки — TETRIS_BUILD_TEST=1 pytest).
     - Документация: docs/ (README, architecture, game-logic, interface, build) —
@@ -54,6 +54,8 @@ context: |
     - Интерфейс на английском (по умолчанию) и русском
     - Сборка в один исполняемый файл для Windows
     - Инструкция для игрока docs/user-guide.md
+    - Инструкция в игре по F2 и пункту меню «Guide»: 6 страниц на английском
+      и русском (тексты — tetris_ui/guide.py)
   Пока не реализовано: переназначение клавиш, полноэкранный режим и
   масштаб окна, очки за T-spin, combo и back-to-back, очки за падение,
   превью нескольких следующих фигур, управление мышью, сброс рекордов из игры.
@@ -71,7 +73,7 @@ context: |
       (кроме __init__); это проверяет tests/test_docstrings.py
     - Изменение, меняющее устройство программы, обновляет docs/
     - Изменение управления, меню или настроек обновляет и
-      docs/user-guide.md
+      docs/user-guide.md, и инструкцию в игре (tetris_ui/guide.py)
 
 # Per-artifact rules
 rules:

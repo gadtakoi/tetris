@@ -1,6 +1,6 @@
 """Keyboard input rules without pygame: the main menu and its screens, the help screen,
-auto-repeat, the pause menu, frame time, name entry, restart, settings and each frame's
-sound events."""
+the guide, auto-repeat, the pause menu, frame time, name entry, restart, settings and each
+frame's sound events."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Protocol
 
 from tetris.highscores import Entry, HighScores, append_to_name, final_name
-from tetris_ui import menus
+from tetris_ui import guide, menus
 from tetris_ui.settings import Settings
 
 SOFT_DROP_INTERVAL_MS = 50
@@ -39,6 +39,7 @@ class Key(Enum):
     SFX_DOWN = "sfx_down"
     SFX_UP = "sfx_up"
     HELP = "help"
+    GUIDE = "guide"  # F2
 
 
 # Keys that change the sound settings; they work everywhere except name entry.
@@ -187,6 +188,8 @@ class Controller:
         self.pause_index = 0  # selected item of menus.PAUSE_ITEMS
         self.settings_index = 0  # selected settings row; the last one is Back
         self.quit_requested = False  # Quit was chosen in the main menu
+        self.guide_open = False  # the guide (F2) covers whatever screen is under it
+        self.guide_page = 0  # 0-based page of the guide
         self._phase = Phase.MENU if start_in_menu else Phase.PLAYING
         # Grows whenever the music must start over (new game, music switched on).
         self.music_generation = 0
@@ -237,16 +240,24 @@ class Controller:
     def key_down(self, key: Key) -> None:
         """Handle a key press according to the current phase.
 
-        Sound settings keys work everywhere except during name entry. The menu and its
-        screens are handled by _menu_key(); after game over Enter starts a new game and
-        Esc opens the menu; the help screen closes on F1, Esc, P or Enter; the pause menu
-        takes Up, Down and Enter; during play the key moves, rotates or drops the piece,
-        pauses or opens the help screen.
+        Sound settings keys work everywhere except during name entry. The open guide takes
+        its keys before the screen under it does; F2 opens it in the menu, on the menu's
+        screens and in a game. The menu and its screens are handled by _menu_key(); after
+        game over Enter starts a new game and Esc opens the menu; the help screen closes
+        on F1, Esc, P or Enter; the pause menu takes Up, Down and Enter; during play the
+        key moves, rotates or drops the piece, pauses or opens the help screen.
         """
         phase = self.phase
         if key in SETTINGS_KEYS and phase is not Phase.NAME_ENTRY:
             self._change_settings(key)
             return
+        if self.guide_open:
+            self._guide_key(key)
+            return
+        if key is Key.GUIDE:
+            if phase in MENU_PHASES or (phase is Phase.PLAYING and not self.help_open):
+                self._open_guide()
+            return  # ignored after game over and on the help screen
         if phase in MENU_PHASES:
             self._menu_key(phase, key)
             return
@@ -362,6 +373,8 @@ class Controller:
             self._phase = Phase.SETTINGS
         elif item == menus.CONTROLS:
             self._phase = Phase.CONTROLS
+        elif item == menus.GUIDE:
+            self._open_guide()
         elif item == menus.QUIT:
             self.quit_requested = True
 
@@ -389,12 +402,38 @@ class Controller:
             else:
                 self._open_menu()  # the unfinished game is dropped, nothing is recorded
 
+    def _open_guide(self) -> None:
+        """Show the guide from its first page; a game under it is paused."""
+        self.guide_open = True
+        self.guide_page = 0
+        if self._phase is Phase.PLAYING:
+            self.paused = True
+            self.pause_index = 0
+            self._release_all()
+
+    def _guide_key(self, key: Key) -> None:
+        """Handle a key while the guide is open: turn a page or close the guide."""
+        if key is Key.LEFT:
+            self.guide_page = max(0, self.guide_page - 1)
+        elif key is Key.RIGHT:
+            self.guide_page = min(guide.PAGE_COUNT - 1, self.guide_page + 1)
+        elif key in (Key.ESCAPE, Key.RESTART, Key.GUIDE):
+            self._close_guide()
+
+    def _close_guide(self) -> None:
+        """Close the guide and show the screen under it; the main menu opens afresh with
+        New game selected, and a game stays paused."""
+        self.guide_open = False
+        if self._phase is Phase.MENU:
+            self._open_menu()
+
     def _start_game(self) -> None:
         """Start a new game at the chosen start level; the music starts over."""
         self.game.new_game(self.settings.start_level)
         self.highlight = None
         self.paused = False
         self.help_open = False
+        self.guide_open = False
         self._release_all()
         self._phase = Phase.PLAYING
         self.music_generation += 1
@@ -405,6 +444,7 @@ class Controller:
         self.highlight = None
         self.paused = False
         self.help_open = False
+        self.guide_open = False
         self._release_all()
         self._phase = Phase.MENU
 

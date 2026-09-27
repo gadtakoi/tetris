@@ -15,10 +15,10 @@ from tetris_ui.settings import (
     Settings,
 )
 
-NEW_GAME, HIGH_SCORES, SETTINGS, CONTROLS, QUIT = (
-    "New game", "High scores", "Settings", "Controls", "Quit",
+NEW_GAME, HIGH_SCORES, SETTINGS, CONTROLS, GUIDE, QUIT = (
+    "New game", "High scores", "Settings", "Controls", "Guide", "Quit",
 )
-MAIN_ITEMS = (NEW_GAME, HIGH_SCORES, SETTINGS, CONTROLS, QUIT)
+MAIN_ITEMS = (NEW_GAME, HIGH_SCORES, SETTINGS, CONTROLS, GUIDE, QUIT)
 CONTINUE, MAIN_MENU = "Continue", "Main menu"
 PAUSE_ITEMS = (CONTINUE, MAIN_MENU)
 
