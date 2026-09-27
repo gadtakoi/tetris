@@ -22,7 +22,8 @@ def relative_links(path: Path) -> list[str]:
 
 def test_docs_exist():
     names = {path.name for path in DOC_FILES}
-    assert {"README.md", "architecture.md", "game-logic.md", "interface.md", "build.md"} <= names
+    assert {"README.md", "architecture.md", "game-logic.md", "interface.md", "build.md",
+            "user-guide.md"} <= names
 
 
 @pytest.mark.parametrize("doc", DOC_FILES, ids=lambda path: path.name)
