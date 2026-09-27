@@ -67,7 +67,8 @@ class Game:
         self.new_game()
 
     def new_game(self) -> None:
-        """Start over: empty board, counters at zero, fresh active and next pieces."""
+        """Start over: empty board, counters at zero, a new bag, fresh active and next pieces."""
+        self._randomizer.reset()
         self.board = Board()
         self.is_over = False
         self.score = 0
