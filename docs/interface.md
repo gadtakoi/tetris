@@ -152,4 +152,4 @@
 
 ## Спецификации
 
-Точные требования и сценарии: [controls](../openspec/specs/controls/spec.md), [game-screen](../openspec/specs/game-screen/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md), [localization](../openspec/specs/localization/spec.md).
+Точные требования и сценарии: [controls](../openspec/specs/controls/spec.md), [game-screen](../openspec/specs/game-screen/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md), [localization](../openspec/specs/localization/spec.md), [in-game-guide](../openspec/specs/in-game-guide/spec.md).

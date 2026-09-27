@@ -165,4 +165,4 @@ stateDiagram-v2
 
 ## Нормативные спецификации
 
-Поведение, описанное здесь в общих чертах, точно задано в спецификациях: [game-screen](../openspec/specs/game-screen/spec.md), [controls](../openspec/specs/controls/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [distribution](../openspec/specs/distribution/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md), [localization](../openspec/specs/localization/spec.md).
+Поведение, описанное здесь в общих чертах, точно задано в спецификациях: [game-screen](../openspec/specs/game-screen/spec.md), [controls](../openspec/specs/controls/spec.md), [audio](../openspec/specs/audio/spec.md), [high-scores](../openspec/specs/high-scores/spec.md), [distribution](../openspec/specs/distribution/spec.md), [main-menu](../openspec/specs/main-menu/spec.md), [settings](../openspec/specs/settings/spec.md), [localization](../openspec/specs/localization/spec.md), [in-game-guide](../openspec/specs/in-game-guide/spec.md).
