@@ -1,3 +1,3 @@
-from tetris_ui.app import main
+from tetris_ui.cli import run
 
-raise SystemExit(main())
+raise SystemExit(run())

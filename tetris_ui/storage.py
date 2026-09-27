@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 from pathlib import Path
 
 from tetris.highscores import HighScores
+from tetris_ui.cli import warn
 
 APP_DIR_NAME = "tetris"
 HIGH_SCORES_FILE = "highscores.json"
@@ -52,6 +52,5 @@ def save(scores: HighScores, path: Path) -> bool:
     except OSError as error:
         if tmp_name is not None:
             Path(tmp_name).unlink(missing_ok=True)
-        if sys.stderr is not None:
-            print(f"tetris: could not save high scores to {path}: {error}", file=sys.stderr)
+        warn(f"could not save high scores to {path}: {error}")
         return False
