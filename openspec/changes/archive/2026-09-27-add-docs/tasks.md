@@ -15,7 +15,7 @@
 
 ## 3. Контекст проекта
 
-- [x] 3.1 Обновить `openspec/config.yaml`: название «SEVA Tetris», заставка и экран клавиш, `settings.json`, раздел «Документация: docs/» и правило «изменения, меняющие устройство программы, обновляют docs/». Проверить: `openspec context --json` читает контекст, `openspec validate --all --strict` без ошибок
+- [x] 3.1 Обновить `openspec/config.yaml`: название «Tetris Shmetris», заставка и экран клавиш, `settings.json`, раздел «Документация: docs/» и правило «изменения, меняющие устройство программы, обновляют docs/». Проверить: `openspec context --json` читает контекст, `openspec validate --all --strict` без ошибок
 
 ## 4. Интеграционные проверки
 

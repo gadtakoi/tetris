@@ -29,7 +29,7 @@
 
 ### Таблица и тексты (`layout.py`, без pygame)
 ```python
-TITLE = "SEVA Tetris"
+TITLE = "Tetris Shmetris"
 HOTKEYS = (("Left / Right", "Move"), ("Down", "Soft drop"), ("Space", "Hard drop"),
            ("Up / X", "Rotate right"), ("Z / Ctrl", "Rotate left"), ("P / Esc", "Pause"),
            ("F1", "Help"), ("M", "Music on/off"), ("- / +", "Music volume"),
@@ -51,22 +51,22 @@ HELP_HINT = "Press F1 or Enter to return"
 
 ### Приложение
 - `app.create_controller()` создаёт контроллер с `splash=True`.
-- `KEY_MAP[pygame.K_F1] = Key.HELP`, `set_caption(layout.TITLE)` даёт «SEVA Tetris».
+- `KEY_MAP[pygame.K_F1] = Key.HELP`, `set_caption(layout.TITLE)` даёт «Tetris Shmetris».
 
 ### Название и сборка
-- `cli.parse_args`: `prog="SEVA Tetris"`.
+- `cli.parse_args`: `prog="Tetris Shmetris"`.
 - `build_exe.py`:
-  - `APP_NAME = "SEVA Tetris"`, `--name APP_NAME`, результат `dist/SEVA Tetris.exe`;
+  - `APP_NAME = "Tetris Shmetris"`, `--name APP_NAME`, результат `dist/tetris_shmetris.exe`;
   - после успешной сборки удаляется `dist/tetris.exe`, если он есть.
 - Имя с пробелом нормально работает для двойного щелчка, а в тестах `subprocess` получает путь списком, без разбора оболочкой.
 - Папка данных (`storage.APP_DIR_NAME = "tetris"`) не меняется: при смене имени у игрока «пропали» бы рекорды и настройки.
 
 ## Risks / Trade-offs
 
-- [Ярлыки и закрепления на старый `tetris.exe` перестанут работать] → при сборке старый файл удаляется, чтобы не остался устаревший exe. Игроку нужно открыть новый `SEVA Tetris.exe`, данные сохраняются.
+- [Ярлыки и закрепления на старый `tetris.exe` перестанут работать] → при сборке старый файл удаляется, чтобы не остался устаревший exe. Игроку нужно открыть новый `tetris_shmetris.exe`, данные сохраняются.
 - [Игрок нажимает Enter на заставке, не прочитав таблицу] → таблица доступна в любой момент партии по F1.
 - [Интерфейс на английском, а игрок русскоязычный] → так в игре все надписи (GAME OVER, SCORE). Перевод — отдельное изменение (вне рамок).
 
 ## Migration Plan
 
-При первой сборке появится `SEVA Tetris.exe`, а старый `tetris.exe` удалится. Рекорды и настройки в `%APPDATA%\tetris` сохраняются. Для отката достаточно вернуть прежние `TITLE` и `--name` и убрать фазу `SPLASH`.
+При первой сборке появится `tetris_shmetris.exe`, а старый `tetris.exe` удалится. Рекорды и настройки в `%APPDATA%\tetris` сохраняются. Для отката достаточно вернуть прежние `TITLE` и `--name` и убрать фазу `SPLASH`.

@@ -1,6 +1,6 @@
-# SEVA Tetris — документация
+# Tetris Shmetris — документация
 
-SEVA Tetris — классический тетрис для Windows на Python 3.14 и pygame-ce: поле 10 × 20, семь фигур, очки и уровни по правилам NES, тень и жёсткое падение, таблица рекордов, синтезированные звуки и музыка, главное меню с настройками (стартовый уровень, тень, скорость автоповтора, звук). Игру можно запускать из исходников или одним файлом `SEVA Tetris.exe`.
+Tetris Shmetris — классический тетрис для Windows на Python 3.14 и pygame-ce: поле 10 × 20, семь фигур, очки и уровни по правилам NES, тень и жёсткое падение, таблица рекордов, синтезированные звуки и музыка, главное меню с настройками (стартовый уровень, тень, скорость автоповтора, звук). Игру можно запускать из исходников или одним файлом `tetris_shmetris.exe`.
 
 ## Быстрый старт
 
@@ -11,7 +11,7 @@ SEVA Tetris — классический тетрис для Windows на Python
 | Установить зависимости игры и тестов | `.venv\Scripts\python -m pip install -r requirements.txt` |
 | Запустить игру | `.venv\Scripts\python -m tetris_ui` |
 | Запустить тесты | `.venv\Scripts\python -m pytest` |
-| Собрать `dist\SEVA Tetris.exe` | `.venv\Scripts\python -m pip install -r requirements-build.txt`, затем `.venv\Scripts\python build_exe.py` |
+| Собрать `dist\tetris_shmetris.exe` | `.venv\Scripts\python -m pip install -r requirements-build.txt`, затем `.venv\Scripts\python build_exe.py` |
 | Проверить сборку автотестом (долго) | `set TETRIS_BUILD_TEST=1` и `.venv\Scripts\python -m pytest tests/test_build.py` |
 
 ## Документы
@@ -22,7 +22,7 @@ SEVA Tetris — классический тетрис для Windows на Python
 | [architecture.md](architecture.md) | Пакеты и модули, их зависимости, что происходит за один кадр, фазы экрана, где хранятся данные |
 | [game-logic.md](game-logic.md) | Правила игры по коду: поле, фигуры, вращение, команды, фиксация, линии, очки, уровни, гравитация, конец игры, рекорды |
 | [interface.md](interface.md) | Управление и автоповтор, главное меню и экран настроек, список клавиш, меню паузы, экран конца игры, раскладка экрана, звук, хранение настроек |
-| [build.md](build.md) | Сборка `SEVA Tetris.exe`, её проверка и известные ограничения |
+| [build.md](build.md) | Сборка `tetris_shmetris.exe`, её проверка и известные ограничения |
 
 ## Структура проекта
 

@@ -102,7 +102,7 @@ def test_english_is_unchanged(en):
 
 
 @pytest.mark.parametrize("text", [
-    "SEVA Tetris", "Ann", "Иван", "340", "50%", "English", "Русский",
+    "Tetris Shmetris", "Ann", "Иван", "340", "50%", "English", "Русский",
     "Z / Ctrl", "C / Shift", "P / Esc", "F1", "M", "N", "- / +", "9 / 0", "Enter",
 ])
 def test_untranslated_texts(text):

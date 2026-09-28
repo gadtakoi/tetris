@@ -14,11 +14,11 @@ VSVersionInfo(
       StringTable(
         '040904B0',
         [
-          StringStruct('FileDescription', 'SEVA Tetris'),
+          StringStruct('FileDescription', 'Tetris Shmetris'),
           StringStruct('FileVersion', '1.0.0.0'),
-          StringStruct('InternalName', 'SEVA Tetris'),
-          StringStruct('OriginalFilename', 'SEVA Tetris.exe'),
-          StringStruct('ProductName', 'SEVA Tetris'),
+          StringStruct('InternalName', 'tetris_shmetris'),
+          StringStruct('OriginalFilename', 'tetris_shmetris.exe'),
+          StringStruct('ProductName', 'Tetris Shmetris'),
           StringStruct('ProductVersion', '1.0.0'),
         ],
       ),

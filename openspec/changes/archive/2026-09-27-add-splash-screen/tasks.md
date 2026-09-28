@@ -1,9 +1,9 @@
 # Tasks
 
-## 1. Название «SEVA Tetris»
+## 1. Название «Tetris Shmetris»
 
-- [x] 1.1 `layout.TITLE = "SEVA Tetris"`, `prog="SEVA Tetris"` в `cli.py`; в `build_exe.py` — `APP_NAME = "SEVA Tetris"`, `--name APP_NAME`, проверка `dist/SEVA Tetris.exe` и удаление устаревшего `dist/tetris.exe` после успешной сборки. Обновить тест заголовка окна в `tests/test_ui_smoke.py` на «SEVA Tetris». Проверить: быстрые тесты проходят
-- [x] 1.2 Обновить `tests/test_build.py` под `SEVA Tetris.exe` и сценарий «Сборка после переименования» (перед сборкой положить в `dist` пустой `tetris.exe`, после сборки его нет). Запустить с `TETRIS_BUILD_TEST=1` и убедиться, что тест проходит
+- [x] 1.1 `layout.TITLE = "Tetris Shmetris"`, `prog="Tetris Shmetris"` в `cli.py`; в `build_exe.py` — `APP_NAME = "Tetris Shmetris"`, `--name APP_NAME`, проверка `dist/tetris_shmetris.exe` и удаление устаревшего `dist/tetris.exe` после успешной сборки. Обновить тест заголовка окна в `tests/test_ui_smoke.py` на «Tetris Shmetris». Проверить: быстрые тесты проходят
+- [x] 1.2 Обновить `tests/test_build.py` под `tetris_shmetris.exe` и сценарий «Сборка после переименования» (перед сборкой положить в `dist` пустой `tetris.exe`, после сборки его нет). Запустить с `TETRIS_BUILD_TEST=1` и убедиться, что тест проходит
 
 ## 2. Фазы контроллера (`tetris_ui/input.py`)
 
@@ -14,9 +14,9 @@
 ## 3. Экран клавиш (`tetris_ui/layout.py`, `render.py`, `app.py`)
 
 - [x] 3.1 Реализовать `HOTKEYS`, подсказки, `key_screen()`, `key_screen_texts()`, ветку в `screen_texts()`, отрисовку экрана клавиш (заголовок шрифтом `big`, строки и подсказка шрифтом `small`); `create_controller()` с `splash=True`; `K_F1` в `KEY_MAP`
-- [x] 3.2 Написать тесты по сценариям `game-screen`: «Заставка» (все 11 пар из таблицы спецификации, «SEVA Tetris», «Press Enter to start», нет «SCORE»/«NEXT»; все надписи ASCII), «Экран клавиш по F1» («Press F1 or Enter to return»), «Возврат к полю» (после закрытия снова «SCORE», «NEXT»). В `tests/test_ui_smoke.py`: отрисовка заставки не падает, центр клетки поля (4, 21) имеет цвет фона окна, а не поля; все надписи экрана клавиш помещаются в окно 520 × 640; `K_F1` → `Key.HELP`; `app.create_controller()` начинает с `Phase.SPLASH`. Убедиться, что тесты проходят
+- [x] 3.2 Написать тесты по сценариям `game-screen`: «Заставка» (все 11 пар из таблицы спецификации, «Tetris Shmetris», «Press Enter to start», нет «SCORE»/«NEXT»; все надписи ASCII), «Экран клавиш по F1» («Press F1 or Enter to return»), «Возврат к полю» (после закрытия снова «SCORE», «NEXT»). В `tests/test_ui_smoke.py`: отрисовка заставки не падает, центр клетки поля (4, 21) имеет цвет фона окна, а не поля; все надписи экрана клавиш помещаются в окно 520 × 640; `K_F1` → `Key.HELP`; `app.create_controller()` начинает с `Phase.SPLASH`. Убедиться, что тесты проходят
 
 ## 4. Интеграционные проверки
 
 - [x] 4.1 Запустить `python -m pytest` целиком, сборочный тест с `TETRIS_BUILD_TEST=1` и `openspec validate add-splash-screen --strict`, всё без ошибок
-- [x] 4.2 Вручную: запустить `python -m tetris_ui` и `dist\SEVA Tetris.exe` — заголовок окна «SEVA Tetris», заставка с таблицей клавиш, Enter начинает игру, F1 во время игры показывает список и останавливает игру и музыку, F1/Esc/P/Enter возвращают к игре, рекорды и настройки прежние
+- [x] 4.2 Вручную: запустить `python -m tetris_ui` и `dist\tetris_shmetris.exe` — заголовок окна «Tetris Shmetris», заставка с таблицей клавиш, Enter начинает игру, F1 во время игры показывает список и останавливает игру и музыку, F1/Esc/P/Enter возвращают к игре, рекорды и настройки прежние

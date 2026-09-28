@@ -40,7 +40,7 @@
 ### Ресурс версии exe — `version_info.txt` в git и `--version-file`
 - `build_exe.py` получает чистую функцию `version_info_text(version: str) -> str`. Она возвращает текст `VSVersionInfo` в формате, который принимает PyInstaller:
   - `filevers` и `prodvers` = `(MAJOR, MINOR, PATCH, 0)`;
-  - `StringTable("040904B0", …)` с полями `FileVersion` («1.0.0.0»), `ProductVersion` («1.0.0»), `ProductName` и `FileDescription` («SEVA Tetris»), `OriginalFilename` («SEVA Tetris.exe») и `InternalName`;
+  - `StringTable("040904B0", …)` с полями `FileVersion` («1.0.0.0»), `ProductVersion` («1.0.0»), `ProductName` и `FileDescription` («Tetris Shmetris»), `OriginalFilename` («tetris_shmetris.exe») и `InternalName`;
   - `VarFileInfo` с `Translation` `[1033, 1200]`.
 - Текст хранится в `version_info.txt` в корне проекта, и этот файл хранится в git. Так данные ресурса версии видны в репозитории и в его истории.
 - Перед каждой сборкой `main()` заново создаёт файл из `__version__`, но записывает его, только если текст изменился. PyInstaller получает его через `--version-file`.

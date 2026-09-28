@@ -2,7 +2,8 @@ schema: spec-driven
 
 # Project context — shown to AI when creating artifacts.
 context: |
-  Проект: SEVA Tetris — классический тетрис для десктопа (Windows).
+  Проект: Tetris Shmetris — классический тетрис для десктопа (Windows).
+  Название игры — tetris_ui.GAME_TITLE, имя exe — build_exe.EXE_NAME.
 
   Технологии:
     - Python 3.14 (виртуальное окружение .venv в корне проекта)
@@ -30,7 +31,7 @@ context: |
       settings.json; папка переопределяется переменной TETRIS_DATA_DIR).
     - Запуск: python -m tetris_ui (начинается с главного меню, F1 в партии —
       список клавиш, F2 — инструкция в игре);
-      сборка одного "SEVA Tetris.exe": python build_exe.py
+      сборка одного tetris_shmetris.exe: python build_exe.py
       (проверка сборки — TETRIS_BUILD_TEST=1 pytest).
     - Документация: docs/ (README, architecture, game-logic, interface, build) —
       описывает устройство программы; docs/user-guide.md — инструкция для
@@ -57,7 +58,7 @@ context: |
     - Инструкция в игре по F2 и пункту меню «Guide»: 6 страниц на английском
       и русском (тексты — tetris_ui/guide.py)
     - Номер версии игры (tetris_ui.__version__, сейчас 1.0.0): «v1.0.0» в главном
-      меню и ресурс версии Windows у SEVA Tetris.exe; как и когда его
+      меню и ресурс версии Windows у tetris_shmetris.exe; как и когда его
       поднимать — docs/build.md
   Пока не реализовано: переназначение клавиш, полноэкранный режим и
   масштаб окна, очки за T-spin, combo и back-to-back, очки за падение,

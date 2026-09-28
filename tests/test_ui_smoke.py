@@ -220,7 +220,7 @@ def test_pause_keeps_board_visible_under_shade():
 def test_window_size_and_title():
     screen = app.create_window()
     assert screen.get_size() == (520, 640)
-    assert pygame.display.get_caption()[0] == "SEVA Tetris"
+    assert pygame.display.get_caption()[0] == "Tetris Shmetris"
 
 
 @pytest.fixture
@@ -448,7 +448,7 @@ def test_pause_menu_renders():
 def test_app_starts_in_the_menu(data_dir):
     controller = app.create_controller()
     assert controller.phase is Phase.MENU
-    assert layout.screen_texts(controller)[:2] == ["SEVA Tetris", "New game"]
+    assert layout.screen_texts(controller)[:2] == ["Tetris Shmetris", "New game"]
     press(controller, pygame.K_RETURN)
     assert controller.phase is Phase.PLAYING
 
@@ -586,10 +586,10 @@ def test_language_survives_a_restart(data_dir):
     press(controller, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)  # Settings
     press(controller, pygame.K_RIGHT)  # Language: Русский
     again = app.create_controller()
-    assert layout.screen_texts(again)[:2] == ["SEVA Tetris", "Новая игра"]
+    assert layout.screen_texts(again)[:2] == ["Tetris Shmetris", "Новая игра"]
     screen = app.create_window()
     assert screen.get_size() == (520, 640)
-    assert pygame.display.get_caption()[0] == "SEVA Tetris"
+    assert pygame.display.get_caption()[0] == "Tetris Shmetris"
 
 
 # --- Guide (F2) ---------------------------------------------------------------

@@ -1,9 +1,11 @@
-"""Command line entry point, shared by `python -m tetris_ui` and "SEVA Tetris.exe"."""
+"""Command line entry point, shared by `python -m tetris_ui` and tetris_shmetris.exe."""
 
 from __future__ import annotations
 
 import argparse
 import sys
+
+from tetris_ui import GAME_TITLE  # no pygame: the package itself imports nothing
 
 
 def _frame_count(text: str) -> int:
@@ -19,7 +21,7 @@ def _frame_count(text: str) -> int:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse the command line; invalid arguments exit with code 2."""
-    parser = argparse.ArgumentParser(prog="SEVA Tetris", description="SEVA Tetris: classic Tetris.")
+    parser = argparse.ArgumentParser(prog=GAME_TITLE, description=f"{GAME_TITLE}: classic Tetris.")
     parser.add_argument(
         "--max-frames",
         type=_frame_count,

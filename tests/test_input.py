@@ -4,13 +4,14 @@ from tests.helpers import ScriptedRng
 from tetris.game import Game
 from tetris.pieces import PieceType
 from tetris.highscores import Entry, HighScores
-from tetris_ui import guide, menus
+from tetris_ui import GAME_TITLE, guide, menus
 from tetris_ui.input import Controller, Key, KeyRepeater, Phase, Sound
 from tetris_ui.settings import Settings
 from tetris_ui.texts import RU
 from tetris_ui.layout import (
     HIGHLIGHT,
     TEXT,
+    TITLE,
     all_screen_texts,
     cell_rect,
     full_screen,
@@ -363,6 +364,10 @@ def test_enter_during_real_play_changes_nothing():
 
 
 # --- Layout ----------------------------------------------------------------
+
+
+def test_game_title():
+    assert TITLE == GAME_TITLE == "Tetris Shmetris"
 
 
 def test_cell_rect():
@@ -729,7 +734,7 @@ def test_menu_at_launch():
     assert full_screen(controller) == "menu"
     texts = screen_texts(controller)
     assert texts == [
-        "SEVA Tetris", "New game", "High scores", "Settings", "Controls", "Guide", "Quit",
+        "Tetris Shmetris", "New game", "High scores", "Settings", "Controls", "Guide", "Quit",
         "Up / Down - choose, Enter - select", "v1.0.0",
     ]
     assert highlighted(controller) == ["New game"]
@@ -836,7 +841,7 @@ def test_controls_from_the_menu():
     choose(controller, "Controls")
     assert full_screen(controller) == "controls"
     texts = screen_texts(controller)
-    assert texts[0] == "SEVA Tetris"
+    assert texts[0] == "Tetris Shmetris"
     assert texts[-1] == "Press Enter or Esc to return"
     assert list(zip(texts[1:-1:2], texts[2:-1:2])) == SPEC_HOTKEYS
     controller.key_down(Key.RESTART)
@@ -1236,7 +1241,7 @@ def test_help_screen_texts():
     controller.key_down(Key.HELP)
     texts = screen_texts(controller)
     assert full_screen(controller) == "help"
-    assert texts[0] == "SEVA Tetris"
+    assert texts[0] == "Tetris Shmetris"
     assert texts[-1] == "Press F1 or Enter to return"
     assert list(zip(texts[1:-1:2], texts[2:-1:2])) == SPEC_HOTKEYS
     assert "SCORE" not in texts and "NEXT" not in texts
@@ -1249,7 +1254,7 @@ def test_field_and_panel_return_after_help():
     texts = screen_texts(controller)
     assert full_screen(controller) is None
     assert "SCORE" in texts and "NEXT" in texts
-    assert "SEVA Tetris" not in texts
+    assert "Tetris Shmetris" not in texts
 
 
 # --- Hold key --------------------------------------------------------------
@@ -1359,7 +1364,7 @@ def test_switch_to_russian():
     controller.key_down(Key.ESCAPE)
     texts = screen_texts(controller)
     assert "Новая игра" in texts and "Настройки" in texts
-    assert texts[0] == "SEVA Tetris"
+    assert texts[0] == "Tetris Shmetris"
 
 
 def test_switch_back_to_english():
@@ -1421,7 +1426,7 @@ def test_key_list_in_russian():
                  ("C / Shift", "Отложить"), ("F2", "Инструкция"),
                  ("9 / 0", "Громкость звука")]:
         assert pair in pairs
-    assert texts[0] == "SEVA Tetris"
+    assert texts[0] == "Tetris Shmetris"
     assert texts[-1] == "Enter или Esc - назад"
 
 
@@ -1463,7 +1468,7 @@ def test_setting_values_in_russian(settings, line):
 def test_menu_in_russian():
     _, controller = menu_controller(settings=ru())
     assert screen_texts(controller) == [
-        "SEVA Tetris", "Новая игра", "Рекорды", "Настройки", "Управление", "Инструкция",
+        "Tetris Shmetris", "Новая игра", "Рекорды", "Настройки", "Управление", "Инструкция",
         "Выход", "Вверх / Вниз - выбор, Enter - открыть", "v1.0.0",
     ]
 

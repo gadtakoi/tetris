@@ -1,4 +1,4 @@
-"""Build "dist/SEVA Tetris.exe": one windowed file that runs without Python installed.
+"""Build "dist/tetris_shmetris.exe": one windowed file that runs without Python installed.
 
 The exe gets a Windows version resource (Properties -> Details) from version_info.txt, which
 is kept in git; the build rewrites that file from tetris_ui.__version__ whenever it differs.
@@ -13,21 +13,21 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from tetris_ui import __version__  # no pygame: the package itself imports nothing
+from tetris_ui import GAME_TITLE, __version__  # no pygame: the package imports nothing
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-APP_NAME = "SEVA Tetris"
+EXE_NAME = "tetris_shmetris"  # the exe's file name; the game's name is GAME_TITLE
 DIST_DIR = PROJECT_ROOT / "dist"
 # The exe's version resource; kept in git, written from __version__ by write_version_file().
 VERSION_FILE = PROJECT_ROOT / "version_info.txt"
-# Left behind by builds made before the game was renamed.
+# Left behind by builds made before the game got its own name.
 STALE_EXES = (DIST_DIR / "tetris.exe",)
 
 PYINSTALLER_ARGS = [
     str(PROJECT_ROOT / "launcher.py"),
     "--onefile",
     "--windowed",
-    "--name", APP_NAME,
+    "--name", EXE_NAME,
     "--clean",
     "--noconfirm",
     "--distpath", str(DIST_DIR),
@@ -46,11 +46,11 @@ def version_info_text(version: str) -> str:
     """
     numbers = (*(int(part) for part in version.split(".")), 0)
     strings = (
-        ("FileDescription", APP_NAME),
+        ("FileDescription", GAME_TITLE),
         ("FileVersion", ".".join(map(str, numbers))),
-        ("InternalName", APP_NAME),
-        ("OriginalFilename", f"{APP_NAME}.exe"),
-        ("ProductName", APP_NAME),
+        ("InternalName", EXE_NAME),
+        ("OriginalFilename", f"{EXE_NAME}.exe"),
+        ("ProductName", GAME_TITLE),
         ("ProductVersion", version),
     )
     string_structs = "".join(
@@ -107,7 +107,7 @@ def main() -> int:
     except Exception as error:  # noqa: BLE001 - any build failure must give a non-zero code
         print(f"build failed: {error}", file=sys.stderr)
         return 1
-    exe = DIST_DIR / f"{APP_NAME}.exe"
+    exe = DIST_DIR / f"{EXE_NAME}.exe"
     if not exe.is_file():
         print(f"build finished but {exe} is missing", file=sys.stderr)
         return 1

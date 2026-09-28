@@ -33,6 +33,15 @@ def test_invalid_max_frames_exits_before_any_window(value, capsys):
     assert pygame is None or not pygame.display.get_init()
 
 
+def test_help_names_the_game(capsys):
+    with pytest.raises(SystemExit) as exit_:
+        cli.parse_args(["--help"])
+    assert exit_.value.code == 0
+    out = capsys.readouterr().out
+    assert out.startswith("usage: Tetris Shmetris")
+    assert "Tetris Shmetris: classic Tetris." in out
+
+
 def test_no_arguments_means_no_frame_limit():
     assert cli.parse_args([]).max_frames is None
 

@@ -40,9 +40,10 @@ def test_version_info_for_1_0_0():
         "prodvers=(1, 0, 0, 0)",
         "StringStruct('FileVersion', '1.0.0.0')",
         "StringStruct('ProductVersion', '1.0.0')",
-        "StringStruct('ProductName', 'SEVA Tetris')",
-        "StringStruct('FileDescription', 'SEVA Tetris')",
-        "StringStruct('OriginalFilename', 'SEVA Tetris.exe')",
+        "StringStruct('ProductName', 'Tetris Shmetris')",
+        "StringStruct('FileDescription', 'Tetris Shmetris')",
+        "StringStruct('OriginalFilename', 'tetris_shmetris.exe')",
+        "StringStruct('InternalName', 'tetris_shmetris')",
     ):
         assert part in text, part
 
@@ -63,13 +64,22 @@ def test_pyinstaller_reads_the_version_info(tmp_path):
     assert (info.ffi.productVersionMS, info.ffi.productVersionLS) == (2 << 16 | 13, 4 << 16)
     strings = {s.name: s.val for s in info.kids[0].kids[0].kids}
     assert strings == {
-        "FileDescription": "SEVA Tetris",
+        "FileDescription": "Tetris Shmetris",
         "FileVersion": "2.13.4.0",
-        "InternalName": "SEVA Tetris",
-        "OriginalFilename": "SEVA Tetris.exe",
-        "ProductName": "SEVA Tetris",
+        "InternalName": "tetris_shmetris",
+        "OriginalFilename": "tetris_shmetris.exe",
+        "ProductName": "Tetris Shmetris",
         "ProductVersion": "2.13.4",
     }
+
+
+def test_exe_name():
+    args = build_exe.PYINSTALLER_ARGS
+    assert args[args.index("--name") + 1] == build_exe.EXE_NAME == "tetris_shmetris"
+
+
+def test_only_the_first_builds_exe_is_removed():
+    assert build_exe.STALE_EXES == (PROJECT_ROOT / "dist" / "tetris.exe",)
 
 
 def test_build_passes_the_version_file():

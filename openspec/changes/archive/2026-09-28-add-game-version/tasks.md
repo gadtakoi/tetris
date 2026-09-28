@@ -27,7 +27,7 @@
 ## 3. Версия в свойствах exe (`build_exe.py`)
 
 - [x] 3.1 Добавить в `build_exe.py` функцию `version_info_text(version)` и передачу `--version-file version_info.txt` в PyInstaller, по design.md. Файл лежит в корне проекта и хранится в git; сборка обновляет его из `__version__`, записывая только при изменении. Создать `version_info.txt` для версии 1.0.0. Тесты в `tests/test_version.py` без сборки:
-  - для «1.0.0» текст содержит `filevers=(1, 0, 0, 0)`, `prodvers=(1, 0, 0, 0)`, `FileVersion` «1.0.0.0», `ProductVersion` «1.0.0», `ProductName` и `FileDescription` «SEVA Tetris», `OriginalFilename` «SEVA Tetris.exe»;
+  - для «1.0.0» текст содержит `filevers=(1, 0, 0, 0)`, `prodvers=(1, 0, 0, 0)`, `FileVersion` «1.0.0.0», `ProductVersion` «1.0.0», `ProductName` и `FileDescription` «Tetris Shmetris», `OriginalFilename` «tetris_shmetris.exe»;
   - для «2.13.4» получаются `(2, 13, 4, 0)` и «2.13.4.0»;
   - `version_info.txt` в корне проекта совпадает с `version_info_text(__version__)`, и git его не игнорирует.
 
@@ -44,4 +44,4 @@
 - [x] 4.1 Запустить `python -m pytest` целиком, сборочный тест с `TETRIS_BUILD_TEST=1` и `openspec validate add-game-version --strict`, всё без ошибок.
 - [x] 4.2 Вручную:
   - «v1.0.0» в правом нижнем углу главного меню на обоих языках и нет на других экранах;
-  - у `dist\SEVA Tetris.exe` в «Свойства → Подробно» версия файла 1.0.0.0, версия продукта 1.0.0, название «SEVA Tetris».
+  - у `dist\tetris_shmetris.exe` в «Свойства → Подробно» версия файла 1.0.0.0, версия продукта 1.0.0, название «Tetris Shmetris».

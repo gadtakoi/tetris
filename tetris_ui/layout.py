@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from tetris.board import HIDDEN_ROWS, HEIGHT, VISIBLE_HEIGHT, WIDTH
 from tetris.pieces import PieceType
-from tetris_ui import __version__, guide, menus
+from tetris_ui import GAME_TITLE, __version__, guide, menus
 from tetris_ui.input import Controller, Phase
 from tetris_ui.texts import music_volume_text, name_line, page_line, sound_volume_text, tr
 
 WINDOW_SIZE = (520, 640)
-TITLE = "SEVA Tetris"
+TITLE = GAME_TITLE
 FPS = 60
 
 CELL = 30

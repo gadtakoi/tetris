@@ -1,4 +1,4 @@
-"""Builds "SEVA Tetris.exe" and runs it headless. Slow, so only with TETRIS_BUILD_TEST=1."""
+"""Builds tetris_shmetris.exe and runs it headless. Slow, so only with TETRIS_BUILD_TEST=1."""
 
 import os
 import shutil
@@ -8,11 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from tetris_ui import __version__
+from tetris_ui import GAME_TITLE, __version__
 from tetris_ui.layout import VERSION_TEXT
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-EXE_NAME = "SEVA Tetris.exe"
+EXE_NAME = "tetris_shmetris.exe"
+STALE_EXE = PROJECT_ROOT / "dist" / "tetris.exe"  # left by builds before the game got its name
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("TETRIS_BUILD_TEST") != "1",
@@ -23,9 +24,8 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def built_exe() -> Path:
     """Build the exe once for this module; the build also removes a stale tetris.exe."""
-    stale = PROJECT_ROOT / "dist" / "tetris.exe"  # as if left by a build before the rename
-    stale.parent.mkdir(exist_ok=True)
-    stale.write_bytes(b"")
+    STALE_EXE.parent.mkdir(exist_ok=True)
+    STALE_EXE.write_bytes(b"")  # as if left by a build before the game got its name
     build = subprocess.run(
         [sys.executable, "build_exe.py"],
         cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=600,
@@ -33,7 +33,8 @@ def built_exe() -> Path:
     assert build.returncode == 0, build.stdout[-2000:] + build.stderr[-2000:]
     built = PROJECT_ROOT / "dist" / EXE_NAME
     assert built.is_file()
-    assert not stale.exists()
+    assert not STALE_EXE.exists()
+    assert sorted(p.name for p in built.parent.glob("*.exe")) == [EXE_NAME]
     return built
 
 
@@ -68,5 +69,6 @@ def test_built_exe_has_the_version(built_exe):
     assert info.returncode == 0, info.stderr
     file_version, product_version, product, original, description = info.stdout.splitlines()
     assert (file_version, product_version) == (f"{__version__}.0", __version__)
-    assert (product, original, description) == ("SEVA Tetris", EXE_NAME, "SEVA Tetris")
+    assert (product, original, description) == (GAME_TITLE, EXE_NAME, GAME_TITLE)
+    assert GAME_TITLE == "Tetris Shmetris"
     assert f"v{product_version}" == VERSION_TEXT  # the main menu shows the same number
