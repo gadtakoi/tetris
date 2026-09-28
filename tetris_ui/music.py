@@ -1,4 +1,5 @@
-"""Background music: an original 16-bar A-minor chiptune loop at 140 BPM."""
+"""Background music: an original 16-bar A-minor loop at 140 BPM, played softly on triangle
+waves whose notes fade like a mallet's."""
 
 from __future__ import annotations
 
@@ -52,7 +53,11 @@ BASS: tuple[tuple[str, float], ...] = tuple(
 
 
 def render_music() -> Samples:
-    """The whole loop; it starts and ends at zero, so looping has no click."""
-    lead = sequence(MELODY, SAMPLES_PER_BEAT, "square", 0.3)
-    bass = sequence(BASS, SAMPLES_PER_BEAT, "triangle", 0.4)
+    """The whole loop; it starts and ends at zero, so looping has no click.
+
+    The two volumes add up to less than 1, so mixing the voices never clips. Short notes
+    keep most of their level, long ones fade out before the next.
+    """
+    lead = sequence(MELODY, SAMPLES_PER_BEAT, 0.5, decay_ms=350)
+    bass = sequence(BASS, SAMPLES_PER_BEAT, 0.45, decay_ms=300)
     return mix(lead, bass)
