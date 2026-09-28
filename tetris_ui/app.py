@@ -1,4 +1,4 @@
-"""Window and main loop: pygame events in, frames out."""
+"""Window and main loops, of the game and of the sound check: pygame events in, frames out."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from tetris.game import Game
 from tetris_ui import layout, render, storage
 from tetris_ui.audio import Audio
 from tetris_ui.input import Controller, Key
+from tetris_ui.soundcheck import CheckKey, SoundCheck
 
 KEY_MAP: dict[int, Key] = {
     pygame.K_LEFT: Key.LEFT,
@@ -39,6 +40,17 @@ KEY_MAP: dict[int, Key] = {
     pygame.K_KP0: Key.SFX_UP,
     pygame.K_F1: Key.HELP,
     pygame.K_F2: Key.GUIDE,
+}
+
+# The sound check's keys; every other key does nothing there.
+SOUND_CHECK_KEYS: dict[int, CheckKey] = {
+    pygame.K_UP: CheckKey.UP,
+    pygame.K_DOWN: CheckKey.DOWN,
+    pygame.K_SPACE: CheckKey.PLAY,
+    pygame.K_RETURN: CheckKey.PLAY,
+    pygame.K_KP_ENTER: CheckKey.PLAY,
+    pygame.K_x: CheckKey.MARK,
+    pygame.K_ESCAPE: CheckKey.EXIT,
 }
 
 
@@ -101,6 +113,44 @@ def main(max_frames: int | None = None) -> int:
             controller.update(frame_ms)
             audio.sync(controller)
             render.draw(screen, controller, fonts)
+            pygame.display.flip()
+            frames += 1
+        return 0
+    finally:
+        pygame.quit()
+
+
+def run_sound_check(max_frames: int | None = None) -> int:
+    """Run the sound check until Esc or until the window is closed; max_frames is for
+    tests only.
+
+    The screen speaks the language of the saved settings, which are only read. The report
+    goes to the data folder when the check starts and whenever it changes.
+    """
+    pygame.init()
+    try:
+        screen = create_window()
+        fonts = render.make_fonts()
+        clock = pygame.time.Clock()
+        language = storage.load_settings(storage.settings_path()).language
+        audio = Audio.create()
+        report_path = storage.sound_check_path()
+        check = SoundCheck(
+            can_play=audio.enabled,
+            on_report=lambda text: storage.save_sound_check(text, report_path),
+        )
+        frames = 0
+        while max_frames is None or frames < max_frames:
+            frame_ms = clock.tick(layout.FPS)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return 0
+                if event.type == pygame.KEYDOWN and event.key in SOUND_CHECK_KEYS:
+                    check.key_down(SOUND_CHECK_KEYS[event.key])
+            if check.exit_requested:
+                return 0
+            audio.play_check(check.update(frame_ms))
+            render.draw_sound_check(screen, check, language, audio.enabled, fonts)
             pygame.display.flip()
             frames += 1
         return 0

@@ -14,6 +14,7 @@ from tetris_ui import app, music, synth  # noqa: E402
 from tetris_ui.audio import MIXER_BUFFER, Audio, SilentAudio  # noqa: E402
 from tetris_ui.input import Controller, Key, Sound  # noqa: E402
 from tetris_ui.settings import Settings  # noqa: E402
+from tetris_ui.soundcheck import MUSIC, Playback  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -210,3 +211,62 @@ def test_quieter_effects_leave_the_music_alone(audio):
     for effect in audio._effects.values():
         assert effect.get_volume() == pytest.approx(0.7, abs=MIXER_STEP)
     assert pygame.mixer.Channel(0).get_volume() == music_volume
+
+
+# --- Sound check ---------------------------------------------------------------
+
+
+class RecordingChannel:
+    def __init__(self) -> None:
+        self.plays: list[tuple[object, int]] = []
+        self.volume = 1.0
+
+    def play(self, sound, loops: int = 0) -> None:
+        self.plays.append((sound, loops))
+
+    def set_volume(self, volume: float) -> None:
+        self.volume = volume
+
+
+def test_check_stop_comes_before_the_new_cues(audio):
+    music_channel = pygame.mixer.Channel(0)
+    audio.play_check(Playback(stop=True, cues=(MUSIC, "game_over")))
+    assert music_channel.get_busy()
+    audio.play_check(Playback(stop=True, cues=("game_over",)))
+    assert not music_channel.get_busy()  # the melody stopped
+    assert pygame.mixer.get_busy()  # the new game_over plays (1200 ms long)
+    audio.play_check(Playback(stop=True))
+    assert not pygame.mixer.get_busy()
+
+
+def test_check_plays_effects_at_full_volume(audio):
+    move = audio._effects[Sound.MOVE]
+    move.set_volume(0.3)
+    audio.play_check(Playback(cues=("move",)))
+    assert move.get_volume() == pytest.approx(1.0, abs=MIXER_STEP)
+
+
+def test_check_plays_each_cue_once(audio, monkeypatch):
+    recorders = {sound: RecordingSound() for sound in Sound}
+    monkeypatch.setattr(audio, "_effects", recorders)
+    audio.play_check(Playback(stop=True, cues=("tetris", "level_up")))
+    assert {sound: r.plays for sound, r in recorders.items() if r.plays} == {
+        Sound.TETRIS: 1, Sound.LEVEL_UP: 1}
+    assert recorders[Sound.TETRIS].volume == 1.0
+
+
+def test_check_loops_the_melody_at_half_volume(audio, monkeypatch):
+    channel = pygame.mixer.Channel(0)
+    channel.set_volume(1.0)
+    audio.play_check(Playback(cues=(MUSIC,)))
+    assert channel.get_busy() and channel.get_sound() is not None
+    assert channel.get_volume() == pytest.approx(0.5, abs=MIXER_STEP)
+    recording = RecordingChannel()
+    monkeypatch.setattr(audio, "_channel", recording)
+    audio.play_check(Playback(stop=True, cues=(MUSIC,)))
+    assert recording.plays == [(audio._music, -1)]  # round and round, as in a game
+    assert recording.volume == 0.5
+
+
+def test_silent_check_plays_nothing():
+    SilentAudio().play_check(Playback(stop=True, cues=("move", MUSIC)))  # does not raise

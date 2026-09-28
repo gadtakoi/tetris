@@ -1,4 +1,5 @@
-"""Loading and saving the high score table and sound settings in the user's data folder."""
+"""Loading and saving the high score table, the settings and the sound check report in the
+user's data folder."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from tetris_ui.settings import Settings
 APP_DIR_NAME = "tetris"
 HIGH_SCORES_FILE = "highscores.json"
 SETTINGS_FILE = "settings.json"
+SOUND_CHECK_FILE = "sound-check.json"
 
 
 def data_dir() -> Path:
@@ -34,6 +36,11 @@ def high_scores_path() -> Path:
 def settings_path() -> Path:
     """Where the sound settings are kept, next to the high score table."""
     return data_dir() / SETTINGS_FILE
+
+
+def sound_check_path() -> Path:
+    """Where the sound check report is kept, next to the settings."""
+    return data_dir() / SOUND_CHECK_FILE
 
 
 def load(path: Path) -> HighScores:
@@ -62,6 +69,11 @@ def load_settings(path: Path) -> Settings:
 def save_settings(settings: Settings, path: Path) -> bool:
     """Write the sound settings atomically; report failure instead of raising."""
     return _write_atomic(path, settings.to_json(), "settings")
+
+
+def save_sound_check(text: str, path: Path) -> bool:
+    """Write the sound check report atomically; report failure instead of raising."""
+    return _write_atomic(path, text, "sound check report")
 
 
 def _write_atomic(path: Path, text: str, what: str) -> bool:

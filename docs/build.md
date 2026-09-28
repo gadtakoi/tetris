@@ -55,7 +55,7 @@ set TETRIS_BUILD_TEST=1
 .venv\Scripts\python -m pytest tests/test_build.py
 ```
 
-Тест собирает exe, проверяет удаление старого `tetris.exe`, копирует `tetris_shmetris.exe` в пустую временную папку, запускает его без экрана (`SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`, `--max-frames 30`) и проверяет код 0 и то, что рядом с exe ничего не появилось. Второй тест читает свойства собранного exe через PowerShell (`(Get-Item …).VersionInfo`) и сверяет версию файла и продукта, название и исходное имя с `tetris_ui.__version__` и надписью в главном меню.
+Тест собирает exe, проверяет удаление старого `tetris.exe`, копирует `tetris_shmetris.exe` в пустую временную папку, запускает его без экрана (`SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`, `--max-frames 30`) и проверяет код 0 и то, что рядом с exe ничего не появилось. Так же он запускает exe с `--sound-check --max-frames 30`: код 0, рядом с exe пусто, а в папке данных только отчёт `sound-check.json`. Последний тест читает свойства собранного exe через PowerShell (`(Get-Item …).VersionInfo`) и сверяет версию файла и продукта, название и исходное имя с `tetris_ui.__version__` и надписью в главном меню.
 
 Вручную — дважды щёлкнуть `dist\tetris_shmetris.exe`: открывается окно «Tetris Shmetris» с главным меню, консоли нет.
 

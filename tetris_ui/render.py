@@ -10,11 +10,13 @@ from tetris.board import HIDDEN_ROWS, HEIGHT, WIDTH
 from tetris.pieces import PieceType, shape_cells
 from tetris_ui import layout
 from tetris_ui.input import Controller, Phase
+from tetris_ui.soundcheck import SoundCheck
 
 SMALL_FONT_SIZE = 32
 BIG_FONT_SIZE = 56
 TABLE_FONT_SIZE = 26
 GUIDE_FONT_SIZE = TABLE_FONT_SIZE  # the guide's paragraphs
+CHECK_FONT_SIZE = TABLE_FONT_SIZE  # the sound check's rows, marks and notes
 VERSION_FONT_SIZE = 20  # the version in the main menu
 TABLE_LINE_STEP = 28
 FONT_SIZE_STEP = 2  # how much smaller each try is when a text does not fit
@@ -68,6 +70,8 @@ def screen_font_size(role: str) -> int:
     """The base font size of a full-window screen text with this role."""
     if role == "paragraph":
         return GUIDE_FONT_SIZE
+    if role in ("row", "mark", "note"):
+        return CHECK_FONT_SIZE
     if role == "version":
         return VERSION_FONT_SIZE
     return BIG_FONT_SIZE if role == "title" else SMALL_FONT_SIZE
@@ -181,28 +185,43 @@ def _draw_preview(
         _fill_cell(surface, (x + c * layout.CELL, y + r * layout.CELL, layout.CELL, layout.CELL), color)
 
 
+def draw_sound_check(
+    surface: pygame.Surface, check: SoundCheck, language: str, has_audio: bool, fonts: Fonts
+) -> None:
+    """Draw one frame of the sound check screen."""
+    surface.fill(layout.WINDOW_BG)
+    _draw_texts(surface, layout.sound_check_texts(check, language, has_audio), fonts)
+
+
 def _draw_full_screen(surface: pygame.Surface, controller: Controller, fonts: Fonts) -> None:
     """Fill the window with the screen's title, lines and hint; the guide's paragraphs are
     wrapped and flowed down from the top of its text area."""
     surface.fill(layout.WINDOW_BG)
     texts = layout.full_screen_texts(controller)
-    for text, pos, role, color in texts:
-        if role == "paragraph":
-            continue
-        font = fitted_font(fonts, screen_font_size(role), text, layout.screen_text_width(role))
-        image = font.render(text, True, color)
-        if role in ("key", "action"):
-            surface.blit(image, pos)
-        elif role == "version":
-            surface.blit(image, image.get_rect(bottomright=pos))
-        else:
-            surface.blit(image, image.get_rect(center=pos))
+    _draw_texts(surface, texts, fonts)
     paragraphs = [(text, pos, color) for text, pos, role, color in texts if role == "paragraph"]
     if paragraphs:
         font = fonts.sized(GUIDE_FONT_SIZE)
         color = paragraphs[0][2]
         for line, pos in guide_lines(fonts, [text for text, _, _ in paragraphs], paragraphs[0][1]):
             surface.blit(font.render(line, True, color), pos)
+
+
+def _draw_texts(surface: pygame.Surface, texts: list[layout.ScreenText], fonts: Fonts) -> None:
+    """Draw full-window texts, except the guide's paragraphs, at their role's font size
+    (smaller if a text does not fit its role's width), placed by their role: from the
+    top-left corner, from the bottom-right one (the version) or centered."""
+    for text, pos, role, color in texts:
+        if role == "paragraph":
+            continue
+        font = fitted_font(fonts, screen_font_size(role), text, layout.screen_text_width(role))
+        image = font.render(text, True, color)
+        if role in layout.TOP_LEFT_ROLES:
+            surface.blit(image, pos)
+        elif role == "version":
+            surface.blit(image, image.get_rect(bottomright=pos))
+        else:
+            surface.blit(image, image.get_rect(center=pos))
 
 
 def _draw_overlay(

@@ -6,6 +6,7 @@ import pytest
 
 from tetris_ui.texts import (
     RU,
+    check_volume_text,
     music_volume_text,
     name_line,
     page_line,
@@ -83,6 +84,37 @@ SPEC_PAIRS = [
     ('Music on/off', 'Музыка вкл/выкл'),
     ('Sound on/off', 'Звук вкл/выкл'),
     ('Select / new game', 'Выбор / новая игра'),
+    ('Sound check', 'Проверка звуков'),
+    ('Rotate', 'Поворот'),
+    ('Hold piece', 'Откладывание фигуры'),
+    ('Lock', 'Закрепление'),
+    ('Line clear', 'Уборка рядов'),
+    ('Tetris', 'Тетрис'),
+    ('Level up', 'Новый уровень'),
+    ('Game over', 'Конец игры'),
+    ('Move with autorepeat', 'Сдвиг с автоповтором'),
+    ('Clear + level up', 'Уборка + новый уровень'),
+    ('Tetris + level up', 'Тетрис + новый уровень'),
+    ('Lock + game over', 'Закрепление + конец игры'),
+    ('Piece moved left or right', 'Фигура сдвинулась влево или вправо'),
+    ('Piece turned', 'Фигура повернулась'),
+    ('Piece put on hold', 'Фигура отложена'),
+    ('Piece locked, no lines cleared', 'Фигура закрепилась, ряды не убраны'),
+    ('One to three lines cleared', 'Убрано от одного до трёх рядов'),
+    ('Four lines cleared at once', 'Убраны четыре ряда сразу'),
+    ('Level went up', 'Уровень повысился'),
+    ('Game ended', 'Партия окончена'),
+    ('Key held: 7 moves wall to wall', 'Клавиша удержана: 7 сдвигов от стены до стены'),
+    ('Lines cleared, level went up', 'Ряды убраны, уровень повысился'),
+    ('Tetris, level went up', 'Тетрис, уровень повысился'),
+    ('Last piece locked, game over', 'Последняя фигура закрепилась, конец игры'),
+    ('Background melody in a loop', 'Фоновая мелодия по кругу'),
+    ('unpleasant', 'неприятно'),
+    ('Volume: effects <n>%, music <m>%', 'Громкость: эффекты <n>%, музыка <m>%'),
+    ('No sound device', 'Нет звукового устройства'),
+    ('Marks are saved to sound-check.json', 'Отметки сохраняются в sound-check.json'),
+    ('Up / Down - choose, Space - play again', 'Вверх / Вниз - выбор, Пробел - ещё раз'),
+    ('X - unpleasant, Esc - exit', 'X - неприятно, Esc - выход'),
 ]
 FIXED_PAIRS = [(en, ru) for en, ru in SPEC_PAIRS if "<" not in en]
 
@@ -128,6 +160,14 @@ def test_page_template():
     assert page_line(1, 6, "ru") == "Страница 1 / 6"
     template_pairs = [(en, ru) for en, ru in SPEC_PAIRS if en.startswith("Page ")]
     assert template_pairs == [("Page <n> / <m>", "Страница <n> / <m>")]
+
+
+def test_check_volume_template():
+    assert check_volume_text(100, 50, "en") == "Volume: effects 100%, music 50%"
+    assert check_volume_text(100, 50, "ru") == "Громкость: эффекты 100%, музыка 50%"
+    template_pairs = [(en, ru) for en, ru in SPEC_PAIRS if en.startswith("Volume: ")]
+    assert template_pairs == [("Volume: effects <n>%, music <m>%",
+                               "Громкость: эффекты <n>%, музыка <m>%")]
 
 
 def test_texts_module_does_not_import_pygame():

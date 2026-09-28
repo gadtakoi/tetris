@@ -93,3 +93,27 @@ def test_settings_save_failure_is_reported_not_raised(tmp_path, capsys):
     blocker.write_text("x", encoding="utf-8")
     assert not storage.save_settings(Settings(), blocker / "settings.json")
     assert "could not save settings" in capsys.readouterr().err
+
+
+# --- Sound check report ----------------------------------------------------
+
+
+def test_sound_check_report_next_to_settings(monkeypatch, tmp_path):
+    monkeypatch.setenv("TETRIS_DATA_DIR", str(tmp_path))
+    assert storage.sound_check_path() == tmp_path / "sound-check.json"
+    assert storage.sound_check_path().parent == storage.settings_path().parent
+
+
+def test_save_sound_check_replaces_the_last_report(tmp_path):
+    path = tmp_path / "sound-check.json"
+    assert storage.save_sound_check('{"version": 1, "items": ["старый"]}', path)
+    assert storage.save_sound_check('{"version": 1, "items": ["новый"]}', path)
+    assert path.read_text(encoding="utf-8") == '{"version": 1, "items": ["новый"]}'
+    assert list(tmp_path.iterdir()) == [path]  # no temporary files left behind
+
+
+def test_sound_check_save_failure_is_reported_not_raised(tmp_path, capsys):
+    blocker = tmp_path / "file"
+    blocker.write_text("x", encoding="utf-8")
+    assert not storage.save_sound_check("{}", blocker / "sound-check.json")
+    assert "sound check report" in capsys.readouterr().err

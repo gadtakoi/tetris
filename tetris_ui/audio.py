@@ -6,6 +6,8 @@ import pygame
 
 from tetris_ui import music, synth
 from tetris_ui.input import Controller, Sound
+from tetris_ui.settings import DEFAULT_SFX_VOLUME, DEFAULT_VOLUME
+from tetris_ui.soundcheck import MUSIC, Playback
 
 MUSIC_CHANNEL = 0
 MIXER_BUFFER = 512
@@ -19,6 +21,9 @@ class SilentAudio:
     def sync(self, controller: Controller) -> None:
         """Drop this frame's sound events."""
         controller.drain_sounds()
+
+    def play_check(self, playback: Playback) -> None:
+        """Play nothing of the sound check: there is no device to play it on."""
 
 
 class Audio:
@@ -55,6 +60,25 @@ class Audio:
         }
         music_sound = pygame.mixer.Sound(buffer=synth.to_bytes(music.render_music()))
         return cls(effects, music_sound)
+
+    def play_check(self, playback: Playback) -> None:
+        """Play one frame of the sound check at the volumes of a first launch.
+
+        If the playback says so, everything that sounds stops first, the music included.
+        Then each cue starts: the melody loops on the music channel, an effect plays on a
+        free channel. The volumes are set on every start, so whatever was set before
+        makes no difference.
+        """
+        if playback.stop:
+            pygame.mixer.stop()
+        for cue in playback.cues:
+            if cue == MUSIC:
+                self._channel.set_volume(DEFAULT_VOLUME / 100)
+                self._channel.play(self._music, loops=-1)
+            else:
+                effect = self._effects[Sound(cue)]
+                effect.set_volume(DEFAULT_SFX_VOLUME / 100)
+                effect.play()
 
     @property
     def music_busy(self) -> bool:

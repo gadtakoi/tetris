@@ -7,7 +7,7 @@
 - **`tetris/` — логика игры.** Поле, фигуры, команды, очки, уровни, гравитация, правила таблицы рекордов. Чистый Python: без pygame, без файлов и без системных часов. Время приходит только через `Game.tick(dt_ms)`, случайность — через передаваемый `random.Random`. Поэтому логика детерминирована и полностью проверяется тестами. Тест [tests/test_architecture.py](../tests/test_architecture.py) следит, чтобы pygame сюда не попал.
 - **`tetris_ui/` — интерфейс.** Окно, клавиатура, отрисовка, звук, хранение рекордов и настроек. Он только читает состояние логики и передаёт ей команды; правил игры в нём нет.
 
-Внутри `tetris_ui/` тоже есть граница: модули `input`, `menus`, `texts`, `guide`, `layout`, `settings`, `synth`, `music` не импортируют pygame и тестируются напрямую, а `app`, `render`, `audio` работают с pygame и проверяются дымовыми тестами с SDL-драйверами `dummy` (без окна и без звуковой карты).
+Внутри `tetris_ui/` тоже есть граница: модули `input`, `menus`, `texts`, `guide`, `layout`, `settings`, `synth`, `music`, `soundcheck` не импортируют pygame и тестируются напрямую, а `app`, `render`, `audio` работают с pygame и проверяются дымовыми тестами с SDL-драйверами `dummy` (без окна и без звуковой карты).
 
 ## Зависимости модулей
 
@@ -16,13 +16,14 @@ flowchart TB
     subgraph ui["tetris_ui — интерфейс"]
         main["__main__ / launcher.py"] --> cli
         cli -.->|"после разбора аргументов"| app
-        app --> input & render & audio & storage & layout
-        render --> layout & input
-        layout --> input & menus & texts & guide
+        app --> input & render & audio & storage & layout & soundcheck
+        render --> layout & input & soundcheck
+        layout --> input & menus & texts & guide & soundcheck & settings
         input --> menus & guide
         menus --> settings
-        audio --> synth & music & input
+        audio --> synth & music & input & soundcheck & settings
         music --> synth
+        soundcheck --> menus
         storage --> settings & cli
         input --> settings
     end
@@ -58,13 +59,14 @@ flowchart TB
 | `tetris_ui/texts.py` | Русский перевод всех постоянных надписей и шаблоны надписей с числами и именем (без pygame) |
 | `tetris_ui/layout.py` | Размеры, координаты и цвета, все надписи экрана на выбранном языке, ширины областей для надписей (без pygame) |
 | `tetris_ui/render.py` | Рисование кадра на поверхности pygame, подбор размера шрифта под ширину области |
-| `tetris_ui/app.py` | Окно, игровой цикл, перевод клавиш pygame в `Key`, сборка контроллера |
+| `tetris_ui/app.py` | Окно, игровой цикл, перевод клавиш pygame в `Key`, сборка контроллера; цикл проверки звуков `run_sound_check()` и её клавиши |
 | `tetris_ui/settings.py` | Настройки игрока (звук, язык, стартовый уровень, тень, автоповтор): значения по умолчанию, проверка, JSON |
-| `tetris_ui/storage.py` | Папка данных, чтение и атомарная запись `highscores.json` и `settings.json` |
+| `tetris_ui/storage.py` | Папка данных, чтение и атомарная запись `highscores.json` и `settings.json`, запись отчёта проверки звуков `sound-check.json` |
 | `tetris_ui/synth.py` | Синтезатор PCM на чистом Python и семь звуковых эффектов |
 | `tetris_ui/music.py` | Ноты фоновой мелодии и её синтез |
-| `tetris_ui/audio.py` | Проигрывание эффектов и музыки через `pygame.mixer` или тишина без устройства |
-| `tetris_ui/cli.py` | Разбор `--max-frames`, безопасный вывод предупреждений |
+| `tetris_ui/audio.py` | Проигрывание эффектов и музыки через `pygame.mixer` или тишина без устройства, в том числе пунктов проверки звуков |
+| `tetris_ui/soundcheck.py` | Проверка звуков: 13 пунктов и расписание их звуков, выбор пункта, отметки «неприятно», отсчёт времени по кадрам, текст отчёта (без pygame) |
+| `tetris_ui/cli.py` | Разбор `--max-frames` и `--sound-check`, запуск игры или проверки звуков, безопасный вывод предупреждений |
 
 ## Один кадр
 
@@ -92,6 +94,13 @@ sequenceDiagram
 ```
 
 Порядок важен: команды игрока выполняются до гравитации того же кадра, а время одного кадра ограничено 100 мс, чтобы после подвисания окна фигура не проваливалась на много строк сразу. Закрытие окна (`QUIT`) и пункт «Quit» главного меню (`Controller.quit_requested`) сразу завершают цикл с кодом 0.
+
+Проверка звуков (`--sound-check`) крутит свой цикл — `app.run_sound_check()`, с тем же ограничением 60 кадров в секунду. В нём нет ни `Controller`, ни партии, ни `Audio.sync()`. Каждый кадр:
+1. события pygame → `SoundCheck.key_down()`;
+2. `audio.play_check(check.update(frame_ms))`;
+3. `render.draw_sound_check()`.
+
+Esc и закрытие окна завершают его с кодом 0. Подробнее — в [interface.md](interface.md).
 
 ## Фазы экрана
 
@@ -161,7 +170,7 @@ stateDiagram-v2
 | Windows | `%APPDATA%\tetris` |
 | иначе | `~/.local/share/tetris` |
 
-В ней два файла: `highscores.json` (таблица рекордов) и `settings.json` (настройки звука и игры). Оба пишутся атомарно — во временный файл и затем заменой — и при повреждении читаются как пустая таблица и настройки по умолчанию. Рядом с exe игра ничего не создаёт.
+В ней два файла игры: `highscores.json` (таблица рекордов) и `settings.json` (настройки звука и игры). Оба пишутся атомарно — во временный файл и затем заменой — и при повреждении читаются как пустая таблица и настройки по умолчанию. Режим проверки звуков пишет туда же, тоже атомарно, третий файл — `sound-check.json` с отметками «неприятно» (см. [interface.md](interface.md)); игра его не читает. Рядом с exe игра ничего не создаёт.
 
 ## Нормативные спецификации
 

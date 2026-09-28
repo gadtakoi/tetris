@@ -10,6 +10,7 @@ Tetris Shmetris — классический тетрис для Windows на Py
 |---|---|
 | Установить зависимости игры и тестов | `.venv\Scripts\python -m pip install -r requirements.txt` |
 | Запустить игру | `.venv\Scripts\python -m tetris_ui` |
+| Проверить звуки: прослушать по очереди и отметить неприятные | `.venv\Scripts\python -m tetris_ui --sound-check` |
 | Запустить тесты | `.venv\Scripts\python -m pytest` |
 | Собрать `dist\tetris_shmetris.exe` | `.venv\Scripts\python -m pip install -r requirements-build.txt`, затем `.venv\Scripts\python build_exe.py` |
 | Проверить сборку автотестом (долго) | `set TETRIS_BUILD_TEST=1` и `.venv\Scripts\python -m pytest tests/test_build.py` |
@@ -21,7 +22,7 @@ Tetris Shmetris — классический тетрис для Windows на Py
 | [user-guide.md](user-guide.md) | Инструкция для игрока: запуск, меню, управление, правила, настройки, рекорды, частые вопросы |
 | [architecture.md](architecture.md) | Пакеты и модули, их зависимости, что происходит за один кадр, фазы экрана, где хранятся данные |
 | [game-logic.md](game-logic.md) | Правила игры по коду: поле, фигуры, вращение, команды, фиксация, линии, очки, уровни, гравитация, конец игры, рекорды |
-| [interface.md](interface.md) | Управление и автоповтор, главное меню и экран настроек, список клавиш, меню паузы, экран конца игры, раскладка экрана, звук, хранение настроек |
+| [interface.md](interface.md) | Управление и автоповтор, главное меню и экран настроек, список клавиш, меню паузы, экран конца игры, раскладка экрана, звук, проверка звуков, хранение настроек |
 | [build.md](build.md) | Сборка `tetris_shmetris.exe`, её проверка и известные ограничения |
 
 ## Структура проекта

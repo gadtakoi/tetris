@@ -21,6 +21,12 @@ def data_dir(monkeypatch, tmp_path):
 
 def test_run_with_max_frames(data_dir):
     assert cli.run(["--max-frames", "3"]) == 0
+    assert not (data_dir / "sound-check.json").exists()  # the game, not the sound check
+
+
+def test_run_the_sound_check(data_dir):
+    assert cli.run(["--sound-check", "--max-frames", "3"]) == 0
+    assert (data_dir / "sound-check.json").exists()
 
 
 @pytest.mark.parametrize("value", ["0", "-5", "abc", "2.5"])
@@ -44,6 +50,27 @@ def test_help_names_the_game(capsys):
 
 def test_no_arguments_means_no_frame_limit():
     assert cli.parse_args([]).max_frames is None
+
+
+def test_sound_check_is_off_by_default():
+    assert cli.parse_args([]).sound_check is False
+    assert cli.parse_args(["--sound-check"]).sound_check is True
+
+
+def test_help_describes_the_sound_check(capsys):
+    with pytest.raises(SystemExit):
+        cli.parse_args(["--help"])
+    out = capsys.readouterr().out
+    assert "--sound-check" in out
+    assert "one by one" in out
+
+
+def test_invalid_max_frames_with_sound_check_opens_no_window(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.run(["--sound-check", "--max-frames", "0"])
+    assert exc.value.code != 0
+    pygame = sys.modules.get("pygame")
+    assert pygame is None or not pygame.display.get_init()
 
 
 def test_warn_writes_to_stderr(capsys):
@@ -73,3 +100,15 @@ def test_module_runs_given_frames(tmp_path):
 def test_module_rejects_zero_frames(tmp_path):
     result = run_module("--max-frames", "0", tmp_path=tmp_path)
     assert result.returncode != 0
+
+
+def test_module_runs_the_sound_check(tmp_path):
+    result = run_module("--sound-check", "--max-frames", "3", tmp_path=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["sound-check.json"]
+
+
+def test_module_sound_check_rejects_zero_frames(tmp_path):
+    result = run_module("--sound-check", "--max-frames", "0", tmp_path=tmp_path)
+    assert result.returncode != 0
+    assert list(tmp_path.iterdir()) == []  # nothing ran, nothing was written

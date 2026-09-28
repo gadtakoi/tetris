@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from tetris.board import HIDDEN_ROWS, HEIGHT, VISIBLE_HEIGHT, WIDTH
 from tetris.pieces import PieceType
-from tetris_ui import GAME_TITLE, __version__, guide, menus
+from tetris_ui import GAME_TITLE, __version__, guide, menus, soundcheck
 from tetris_ui.input import Controller, Phase
-from tetris_ui.texts import music_volume_text, name_line, page_line, sound_volume_text, tr
+from tetris_ui.settings import DEFAULT_SFX_VOLUME, DEFAULT_VOLUME
+from tetris_ui.texts import (
+    check_volume_text,
+    music_volume_text,
+    name_line,
+    page_line,
+    sound_volume_text,
+    tr,
+)
 
 WINDOW_SIZE = (520, 640)
 TITLE = GAME_TITLE
@@ -79,12 +87,29 @@ GUIDE_PARAGRAPH_GAP = 8
 GUIDE_PAGE_Y = 575
 GUIDE_HINT_Y = 610
 VERSION_POS = (510, 630)  # bottom-right corner of the version in the main menu
+# The sound check (--sound-check): the title, a list of rows from the top-left corner of
+# the first one with the marks in a column to their right, then the notes and the hints;
+# every other y is a center.
+CHECK_TITLE = "Sound check"
+CHECK_MARK = "unpleasant"
+NO_SOUND_DEVICE = "No sound device"
+CHECK_REPORT_NOTE = "Marks are saved to sound-check.json"
+CHECK_HINTS = ("Up / Down - choose, Space - play again", "X - unpleasant, Esc - exit")
+CHECK_TITLE_Y = 45
+CHECK_ROWS_X, CHECK_ROWS_Y, CHECK_ROWS_STEP = 40, 90, 30  # top-left of row 1, row pitch
+CHECK_MARK_X = 360  # left edge of the marks
+CHECK_DESCRIPTION_Y = 500
+CHECK_VOLUME_Y = 528
+CHECK_REPORT_Y = 553
+CHECK_HINT_YS = (590, 616)
 
 # Widths the texts must fit in; a text too wide for its font is drawn smaller.
 PANEL_W = WINDOW_SIZE[0] - PANEL_X  # side panel
 SCREEN_TEXT_W = WINDOW_SIZE[0] - 2 * 20  # full-window screens, 20 px margins
 KEY_COLUMN_W = 190  # from KEY_COLUMN_X to 10 px before ACTION_COLUMN_X
 ACTION_COLUMN_W = 240  # from ACTION_COLUMN_X to 10 px before the right edge
+CHECK_ROW_W = CHECK_MARK_X - 10 - CHECK_ROWS_X  # sound check rows end 10 px before the marks
+CHECK_MARK_W = WINDOW_SIZE[0] - 20 - CHECK_MARK_X  # the marks keep the 20 px margin
 MIN_FONT_SIZE = 14
 
 Color = tuple[int, int, int]
@@ -106,6 +131,8 @@ BORDER: Color = (200, 200, 200)
 TEXT: Color = (230, 230, 230)
 HIGHLIGHT: Color = (240, 240, 0)
 VERSION_COLOR: Color = (130, 130, 140)  # muted, so the version does not compete with the items
+NOTE_COLOR: Color = VERSION_COLOR  # the sound check's volume and report lines, as muted
+MARK_COLOR: Color = (240, 96, 96)  # "unpleasant" next to a marked sound check row
 CELL_OUTLINE: Color = (20, 20, 20)
 OVERLAY_ALPHA = 160
 GHOST_DIVISOR = 8  # the ghost is the piece color at 1/8 brightness
@@ -238,6 +265,7 @@ def full_screen(controller: Controller) -> str | None:
 
 ScreenText = tuple[str, tuple[int, int], str, Color]
 FULL_SCREENS = ("menu", "scores", "settings", "controls", "help")
+TOP_LEFT_ROLES = ("key", "action", "row", "mark")  # drawn from their position as top-left
 
 
 def full_screen_texts(controller: Controller) -> list[ScreenText]:
@@ -315,7 +343,40 @@ def _guide_texts(controller: Controller, page: int) -> list[ScreenText]:
 
 def screen_text_width(role: str) -> int:
     """The width a full-window screen text of this role must fit in."""
-    return {"key": KEY_COLUMN_W, "action": ACTION_COLUMN_W}.get(role, SCREEN_TEXT_W)
+    widths = {"key": KEY_COLUMN_W, "action": ACTION_COLUMN_W, "row": CHECK_ROW_W,
+              "mark": CHECK_MARK_W}
+    return widths.get(role, SCREEN_TEXT_W)
+
+
+def sound_check_texts(
+    check: soundcheck.SoundCheck, language: str, has_audio: bool
+) -> list[ScreenText]:
+    """Texts of the sound check screen as (text, position, role, color).
+
+    Roles: "title", "note" and "hint" are centered on their position; "row" (an item of
+    the list, "<number>. <title>") and "mark" (to the right of a marked row) start at it
+    (left edge, top). Without a sound device the volume line gives way to a notice.
+    """
+    center_x = WINDOW_SIZE[0] // 2
+    texts = [(tr(CHECK_TITLE, language), (center_x, CHECK_TITLE_Y), "title", TEXT)]
+    for i, item in enumerate(soundcheck.ITEMS):
+        y = CHECK_ROWS_Y + i * CHECK_ROWS_STEP
+        color = HIGHLIGHT if i == check.index else TEXT
+        texts.append((f"{i + 1}. {tr(item.title, language)}", (CHECK_ROWS_X, y), "row", color))
+        if check.marked[i]:
+            texts.append((tr(CHECK_MARK, language), (CHECK_MARK_X, y), "mark", MARK_COLOR))
+    if has_audio:
+        volume = check_volume_text(DEFAULT_SFX_VOLUME, DEFAULT_VOLUME, language)
+    else:
+        volume = tr(NO_SOUND_DEVICE, language)
+    texts += [
+        (tr(check.item.description, language), (center_x, CHECK_DESCRIPTION_Y), "note", TEXT),
+        (volume, (center_x, CHECK_VOLUME_Y), "note", NOTE_COLOR),
+        (tr(CHECK_REPORT_NOTE, language), (center_x, CHECK_REPORT_Y), "note", NOTE_COLOR),
+    ]
+    texts += [(tr(hint, language), (center_x, y), "hint", TEXT)
+              for hint, y in zip(CHECK_HINTS, CHECK_HINT_YS)]
+    return texts
 
 
 def _column(

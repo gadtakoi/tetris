@@ -29,15 +29,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="N",
         help="draw N frames and exit (for automated checks)",
     )
+    parser.add_argument(
+        "--sound-check",
+        action="store_true",
+        help="play every sound of the game one by one and mark the unpleasant ones",
+    )
     return parser.parse_args(argv)
 
 
 def run(argv: list[str] | None = None) -> int:
-    """Parse the arguments before opening any window, then run the game."""
+    """Parse the arguments before opening any window, then run the game or, with
+    --sound-check, the sound check."""
     args = parse_args(argv)
-    from tetris_ui.app import main  # imports pygame, so only after the arguments are valid
+    from tetris_ui import app  # imports pygame, so only after the arguments are valid
 
-    return main(max_frames=args.max_frames)
+    if args.sound_check:
+        return app.run_sound_check(max_frames=args.max_frames)
+    return app.main(max_frames=args.max_frames)
 
 
 def warn(message: str) -> None:

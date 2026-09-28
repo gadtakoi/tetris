@@ -56,6 +56,26 @@ def test_built_exe_runs_standalone(built_exe, tmp_path):
     assert [p.name for p in exe_dir.iterdir()] == [EXE_NAME]
 
 
+def test_built_exe_runs_the_sound_check(built_exe, tmp_path):
+    exe_dir = tmp_path / "exe"
+    exe_dir.mkdir()
+    exe = Path(shutil.copy2(built_exe, exe_dir / EXE_NAME))
+    data_dir = tmp_path / "data"
+    env = dict(
+        os.environ,
+        SDL_VIDEODRIVER="dummy",
+        SDL_AUDIODRIVER="dummy",
+        TETRIS_DATA_DIR=str(data_dir),
+    )
+    result = subprocess.run(
+        [str(exe), "--sound-check", "--max-frames", "30"],
+        cwd=exe_dir, env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert [p.name for p in exe_dir.iterdir()] == [EXE_NAME]
+    assert [p.name for p in data_dir.iterdir()] == ["sound-check.json"]
+
+
 def test_built_exe_has_the_version(built_exe):
     script = (
         f"$v = (Get-Item -LiteralPath '{built_exe}').VersionInfo; "

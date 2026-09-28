@@ -15,8 +15,10 @@ from tetris.game import ActivePiece, Game  # noqa: E402
 from tetris.highscores import Entry, HighScores  # noqa: E402
 from tetris.pieces import PieceType  # noqa: E402
 from tetris_ui import app, guide, layout, menus, render  # noqa: E402
-from tetris_ui.input import Controller, Key, Phase  # noqa: E402
+from tetris_ui.audio import Audio  # noqa: E402
+from tetris_ui.input import Controller, Key, Phase, Sound  # noqa: E402
 from tetris_ui.settings import Settings  # noqa: E402
+from tetris_ui.soundcheck import ITEMS, MUSIC, CheckKey, SoundCheck  # noqa: E402
 
 VISIBLE_CELLS = [(c, r) for r in range(HIDDEN_ROWS, HEIGHT) for c in range(WIDTH)]
 
@@ -701,3 +703,285 @@ def test_version_label_in_the_menu():
     colors = {tuple(surface.get_at((x, y)))[:3]
               for x in range(rect.left, rect.right) for y in range(rect.top, rect.bottom)}
     assert layout.VERSION_COLOR in colors  # drawn, in its muted color
+
+
+# --- Sound check screen --------------------------------------------------------
+
+
+def check_with(index: int, marked: bool = False) -> SoundCheck:
+    """A sound check with item `index` selected and, if `marked`, every item marked."""
+    check = SoundCheck()
+    for _ in range(index):
+        check.key_down(CheckKey.DOWN)
+    if marked:
+        check.marked = [True] * len(ITEMS)
+    return check
+
+
+def check_rects(fonts, check: SoundCheck, language: str, has_audio: bool):
+    """(text, role, rect) of every sound check text at its fitted size and place."""
+    placed = []
+    for text, pos, role, _ in layout.sound_check_texts(check, language, has_audio):
+        rect = fitted_rect(fonts, render.screen_font_size(role), text,
+                           layout.screen_text_width(role))
+        if role in layout.TOP_LEFT_ROLES:
+            rect.topleft = pos
+        else:
+            rect.center = pos
+        placed.append((text, role, rect))
+    return placed
+
+
+@pytest.mark.parametrize("has_audio", [True, False])
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_sound_check_texts_fit_the_window(language, has_audio):
+    fonts = render.make_fonts()
+    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    for index in range(len(ITEMS)):
+        placed = check_rects(fonts, check_with(index, marked=True), language, has_audio)
+        rects = [rect for _, _, rect in placed]
+        for text, role, rect in placed:
+            assert window.contains(rect), text
+            assert rect.width <= layout.screen_text_width(role), text
+            if role == "row":  # rows end before the column of marks starts
+                assert rect.right < layout.CHECK_MARK_X, text
+        for i, rect in enumerate(rects):  # lines do not run into each other
+            assert rect.collidelist(rects[i + 1:]) == -1, placed[i][0]
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_sound_check_texts_keep_their_size(language):
+    fonts = render.make_fonts()
+    for text, pos, role, _ in layout.sound_check_texts(check_with(8, True), language, True):
+        size = render.fitted_size(fonts, render.screen_font_size(role), text,
+                                  layout.screen_text_width(role))
+        assert size == render.screen_font_size(role), text  # nothing had to shrink
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_every_sound_check_character_is_in_the_font(language):
+    fonts = render.make_fonts()
+    chars: set[str] = set()
+    for index in range(len(ITEMS)):
+        for has_audio in (True, False):
+            texts = layout.sound_check_texts(check_with(index, True), language, has_audio)
+            chars |= set("".join(text for text, _, _, _ in texts))
+    for size in {render.CHECK_FONT_SIZE, render.SMALL_FONT_SIZE, render.BIG_FONT_SIZE}:
+        font = fonts.sized(size)
+        missing = glyph(font, "")  # private use area: not in the font
+        assert glyph(font, "←") == missing  # the check does see a missing glyph
+        assert [char for char in sorted(chars - {" "}) if glyph(font, char) == missing] == []
+
+
+def test_selected_sound_check_row_is_highlighted():
+    check = check_with(4)  # item 5
+    surface = pygame.Surface(layout.WINDOW_SIZE)
+    render.draw_sound_check(surface, check, "en", True, render.make_fonts())
+    placed = check_rects(render.make_fonts(), check, "en", True)
+    rows = [rect for _, role, rect in placed if role == "row"]
+    for i, rect in enumerate(rows):
+        colors = {tuple(surface.get_at((x, y)))[:3]
+                  for x in range(rect.left, rect.right) for y in range(rect.top, rect.bottom)}
+        assert (layout.HIGHLIGHT in colors) == (i == 4), i
+    assert layout.HIGHLIGHT == (240, 240, 0)  # the color of a selected menu item
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_sound_check_screen_renders(language):
+    surface = pygame.Surface(layout.WINDOW_SIZE)
+    check = check_with(12, marked=True)
+    render.draw_sound_check(surface, check, language, False, render.make_fonts())
+    mark = next(rect for _, role, rect in check_rects(render.make_fonts(), check, language, False)
+                if role == "mark")
+    colors = {tuple(surface.get_at((x, y)))[:3]
+              for x in range(mark.left, mark.right) for y in range(mark.top, mark.bottom)}
+    assert layout.MARK_COLOR in colors
+    assert tuple(surface.get_at((5, 5)))[:3] == layout.WINDOW_BG
+
+
+# --- Sound check mode ----------------------------------------------------------
+
+MIXER_STEP = 1 / 128  # SDL keeps volumes in 128 steps
+
+
+def report_items(data_dir) -> list[dict]:
+    data = json.loads((data_dir / "sound-check.json").read_text(encoding="utf-8"))
+    assert data["version"] == 1
+    return data["items"]
+
+
+@pytest.fixture
+def seen_checks(monkeypatch):
+    """(check, language, has_audio) of every frame run_sound_check draws."""
+    frames = []
+    draw = render.draw_sound_check
+
+    def recording_draw(surface, check, language, has_audio, fonts):
+        frames.append((check, language, has_audio))
+        draw(surface, check, language, has_audio, fonts)
+
+    monkeypatch.setattr(render, "draw_sound_check", recording_draw)
+    return frames
+
+
+def shown_texts(frame) -> list[str]:
+    check, language, has_audio = frame
+    return [text for text, _, _, _ in layout.sound_check_texts(check, language, has_audio)]
+
+
+@pytest.mark.parametrize(
+    ("pygame_key", "key"),
+    [
+        (pygame.K_UP, CheckKey.UP),
+        (pygame.K_DOWN, CheckKey.DOWN),
+        (pygame.K_SPACE, CheckKey.PLAY),
+        (pygame.K_RETURN, CheckKey.PLAY),
+        (pygame.K_KP_ENTER, CheckKey.PLAY),
+        (pygame.K_x, CheckKey.MARK),
+        (pygame.K_ESCAPE, CheckKey.EXIT),
+    ],
+)
+def test_sound_check_key_map(pygame_key, key):
+    assert app.SOUND_CHECK_KEYS[pygame_key] is key
+
+
+def test_sound_check_key_map_has_no_other_keys():
+    assert len(app.SOUND_CHECK_KEYS) == 7
+    for other in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_m, pygame.K_n, pygame.K_9,
+                  pygame.K_0, pygame.K_MINUS, pygame.K_EQUALS, pygame.K_p, pygame.K_F1,
+                  pygame.K_F2):
+        assert other not in app.SOUND_CHECK_KEYS
+
+
+def test_sound_check_runs_frames(data_dir, seen_checks):
+    assert app.run_sound_check(max_frames=3) == 0
+    assert len(seen_checks) == 3
+    assert [i["played"] for i in report_items(data_dir)] == [True] + [False] * 12
+    assert sorted(path.name for path in data_dir.iterdir()) == ["sound-check.json"]
+
+
+def test_held_keys_do_not_repeat_in_the_sound_check(data_dir, monkeypatch):
+    repeats = []
+    draw = render.draw_sound_check
+
+    def checking_draw(*args):
+        repeats.append(pygame.key.get_repeat())
+        draw(*args)
+
+    monkeypatch.setattr(render, "draw_sound_check", checking_draw)
+    assert app.run_sound_check(max_frames=2) == 0
+    assert repeats == [(0, 0), (0, 0)]  # a held key gives one KEYDOWN
+
+
+def test_game_keys_do_nothing_in_the_sound_check(data_dir, seen_checks):
+    post_keys(pygame.K_m, pygame.K_n, pygame.K_9, pygame.K_F2, pygame.K_LEFT, pygame.K_RIGHT)
+    assert app.run_sound_check(max_frames=3) == 0
+    check = seen_checks[-1][0]
+    assert check.index == 0 and not any(check.marked)
+    assert shown_texts(seen_checks[-1])[0] == "Sound check"  # no guide, no menu
+    assert not (data_dir / "settings.json").exists()
+
+
+def test_mark_then_escape_ends_the_sound_check(data_dir):
+    post_keys(pygame.K_x, pygame.K_ESCAPE)
+    start = time.monotonic()
+    assert app.run_sound_check(max_frames=600) == 0  # 600 frames would take ~10 s
+    assert time.monotonic() - start < 3
+    first = report_items(data_dir)[0]
+    assert (first["id"], first["unpleasant"]) == ("move", True)
+    assert not (data_dir / "settings.json").exists()
+
+
+def test_mark_is_in_the_report_while_the_check_runs(data_dir, monkeypatch):
+    in_file = []
+    draw = render.draw_sound_check
+
+    def reading_draw(*args):
+        in_file.append(report_items(data_dir)[3])
+        draw(*args)
+
+    monkeypatch.setattr(render, "draw_sound_check", reading_draw)
+    post_keys(pygame.K_DOWN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_x)
+    assert app.run_sound_check(max_frames=1) == 0
+    assert (in_file[0]["id"], in_file[0]["unpleasant"]) == ("lock", True)
+
+
+def test_closing_the_window_ends_the_sound_check(data_dir):
+    pygame.event.post(pygame.event.Event(pygame.QUIT))
+    start = time.monotonic()
+    assert app.run_sound_check(max_frames=600) == 0
+    assert time.monotonic() - start < 3
+
+
+def test_sound_check_ignores_the_saved_sound_settings(data_dir, monkeypatch):
+    settings_file = data_dir / "settings.json"
+    settings_file.write_text(json.dumps(
+        {"version": 1, "sound_on": False, "sfx_volume": 30, "music_volume": 100}),
+        encoding="utf-8")
+    saved = settings_file.read_text(encoding="utf-8")
+    heard = []
+    play_check = Audio.play_check
+
+    def recording_play_check(self, playback):
+        play_check(self, playback)
+        for cue in playback.cues:
+            sound = self._channel if cue == MUSIC else self._effects[Sound(cue)]
+            heard.append((cue, sound.get_volume()))
+
+    draw = render.draw_sound_check
+
+    def stepping_draw(surface, check, language, has_audio, fonts):
+        draw(surface, check, language, has_audio, fonts)
+        if check.index == 0:
+            post_keys(*[pygame.K_DOWN] * 12)  # on to the music
+        else:
+            post_keys(pygame.K_ESCAPE)
+
+    monkeypatch.setattr(Audio, "play_check", recording_play_check)
+    monkeypatch.setattr(render, "draw_sound_check", stepping_draw)
+    assert app.run_sound_check(max_frames=100) == 0
+    assert [cue for cue, _ in heard] == ["move", MUSIC]
+    assert heard[0][1] == pytest.approx(1.0, abs=MIXER_STEP)
+    assert heard[1][1] == pytest.approx(0.5, abs=MIXER_STEP)
+    assert settings_file.read_text(encoding="utf-8") == saved
+
+
+def test_sound_check_speaks_the_saved_language(data_dir, seen_checks):
+    (data_dir / "settings.json").write_text('{"version": 1, "language": "ru"}', encoding="utf-8")
+    assert app.run_sound_check(max_frames=1) == 0
+    assert shown_texts(seen_checks[0])[0] == "Проверка звуков"
+
+
+def test_sound_check_without_a_sound_device(data_dir, monkeypatch, seen_checks):
+    def broken_init(*args, **kwargs):
+        raise pygame.error("no audio device")
+
+    monkeypatch.setattr(pygame.mixer, "init", broken_init)
+    post_keys(pygame.K_x)
+    assert app.run_sound_check(max_frames=3) == 0
+    assert seen_checks[-1][2] is False
+    assert "No sound device" in shown_texts(seen_checks[-1])
+    items = report_items(data_dir)
+    assert not any(i["played"] for i in items)
+    assert items[0]["unpleasant"] is True
+
+
+def test_sound_check_goes_on_when_the_report_cannot_be_written(monkeypatch, tmp_path,
+                                                               seen_checks):
+    blocker = tmp_path / "file"
+    blocker.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("TETRIS_DATA_DIR", str(blocker / "data"))  # a folder inside a file
+    post_keys(pygame.K_x)
+    assert app.run_sound_check(max_frames=3) == 0
+    assert len(seen_checks) == 3
+    assert "unpleasant" in shown_texts(seen_checks[-1])
+
+
+def test_a_new_sound_check_starts_a_new_report(data_dir):
+    old = {"version": 1, "items": [{"number": 4, "id": "lock", "played": True,
+                                    "unpleasant": True}]}
+    (data_dir / "sound-check.json").write_text(json.dumps(old), encoding="utf-8")
+    assert app.run_sound_check(max_frames=1) == 0
+    items = report_items(data_dir)
+    assert len(items) == 13
+    assert not any(i["unpleasant"] for i in items)

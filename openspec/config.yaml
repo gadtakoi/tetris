@@ -20,17 +20,19 @@ context: |
       Тест tests/test_architecture.py проверяет, что pygame сюда не попадает.
     - tetris_ui/ — слой представления: читает состояние логики и передаёт
       ей команды; правил игры в нём нет. Модули input.py, menus.py, texts.py, guide.py,
-      layout.py, settings.py, synth.py, music.py — без pygame и тестируются
-      напрямую; render.py,
+      layout.py, settings.py, synth.py, music.py, soundcheck.py — без pygame и
+      тестируются напрямую; render.py,
       app.py, audio.py — pygame, проверяются дымовыми тестами с
       SDL_VIDEODRIVER/SDL_AUDIODRIVER=dummy.
     - Время передаётся в логику явно (tick с dt в миллисекундах), а не
       берётся из системных часов — это делает логику тестируемой.
     - Звук и музыка синтезируются в коде при запуске, без аудиофайлов.
     - Рекорды и настройки хранятся в %APPDATA%\tetris\ (highscores.json,
-      settings.json; папка переопределяется переменной TETRIS_DATA_DIR).
+      settings.json; папка переопределяется переменной TETRIS_DATA_DIR);
+      там же отчёт проверки звуков sound-check.json.
     - Запуск: python -m tetris_ui (начинается с главного меню, F1 в партии —
       список клавиш, F2 — инструкция в игре);
+      проверка звуков: python -m tetris_ui --sound-check;
       сборка одного tetris_shmetris.exe: python build_exe.py
       (проверка сборки — TETRIS_BUILD_TEST=1 pytest).
     - Документация: docs/ (README, architecture, game-logic, interface, build) —
@@ -60,6 +62,9 @@ context: |
     - Номер версии игры (tetris_ui.__version__, сейчас 1.0.0): «v1.0.0» в главном
       меню и ресурс версии Windows у tetris_shmetris.exe; как и когда его
       поднимать — docs/build.md
+    - Режим проверки звуков (--sound-check, для разработки): 13 пунктов — эффекты
+      по отдельности и в сочетаниях, как в партии, и мелодия; отметки
+      «неприятно» по X сохраняются в sound-check.json (tetris_ui/soundcheck.py)
   Пока не реализовано: переназначение клавиш, полноэкранный режим и
   масштаб окна, очки за T-spin, combo и back-to-back, очки за падение,
   превью нескольких следующих фигур, управление мышью, сброс рекордов из игры.

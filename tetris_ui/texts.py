@@ -77,6 +77,37 @@ RU: dict[str, str] = {
     "Music on/off": "Музыка вкл/выкл",
     "Sound on/off": "Звук вкл/выкл",
     "Select / new game": "Выбор / новая игра",
+    # the sound check (--sound-check): title, items, descriptions, lines and hints
+    "Sound check": "Проверка звуков",
+    "Rotate": "Поворот",
+    "Hold piece": "Откладывание фигуры",
+    "Lock": "Закрепление",
+    "Line clear": "Уборка рядов",
+    "Tetris": "Тетрис",
+    "Level up": "Новый уровень",
+    "Game over": "Конец игры",
+    "Move with autorepeat": "Сдвиг с автоповтором",
+    "Clear + level up": "Уборка + новый уровень",
+    "Tetris + level up": "Тетрис + новый уровень",
+    "Lock + game over": "Закрепление + конец игры",
+    "Piece moved left or right": "Фигура сдвинулась влево или вправо",
+    "Piece turned": "Фигура повернулась",
+    "Piece put on hold": "Фигура отложена",
+    "Piece locked, no lines cleared": "Фигура закрепилась, ряды не убраны",
+    "One to three lines cleared": "Убрано от одного до трёх рядов",
+    "Four lines cleared at once": "Убраны четыре ряда сразу",
+    "Level went up": "Уровень повысился",
+    "Game ended": "Партия окончена",
+    "Key held: 7 moves wall to wall": "Клавиша удержана: 7 сдвигов от стены до стены",
+    "Lines cleared, level went up": "Ряды убраны, уровень повысился",
+    "Tetris, level went up": "Тетрис, уровень повысился",
+    "Last piece locked, game over": "Последняя фигура закрепилась, конец игры",
+    "Background melody in a loop": "Фоновая мелодия по кругу",
+    "unpleasant": "неприятно",
+    "No sound device": "Нет звукового устройства",
+    "Marks are saved to sound-check.json": "Отметки сохраняются в sound-check.json",
+    "Up / Down - choose, Space - play again": "Вверх / Вниз - выбор, Пробел - ещё раз",
+    "X - unpleasant, Esc - exit": "X - неприятно, Esc - выход",
 }
 
 
@@ -101,6 +132,14 @@ def sound_volume_text(volume: int, language: str) -> str:
 def name_line(name: str, language: str) -> str:
     """The name being typed with a cursor: "Name: Ann_" or "Имя: Ann_"."""
     return f"{'Имя' if language == 'ru' else 'Name'}: {name}_"
+
+
+def check_volume_text(sfx: int, music: int, language: str) -> str:
+    """The sound check's volume line: "Volume: effects 100%, music 50%" or
+    "Громкость: эффекты 100%, музыка 50%"."""
+    if language == "ru":
+        return f"Громкость: эффекты {sfx}%, музыка {music}%"
+    return f"Volume: effects {sfx}%, music {music}%"
 
 
 def page_line(page: int, total: int, language: str) -> str:
