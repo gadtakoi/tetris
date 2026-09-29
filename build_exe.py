@@ -2,6 +2,7 @@
 
 The exe gets a Windows version resource (Properties -> Details) from version_info.txt, which
 is kept in git; the build rewrites that file from tetris_ui.__version__ whenever it differs.
+Its icon is made from tetris_ui/icon.png at every build and is not kept.
 
 Usage (from the project's virtual environment):
     python -m pip install -r requirements.txt -r requirements-build.txt
@@ -10,8 +11,11 @@ Usage (from the project's virtual environment):
 
 from __future__ import annotations
 
+import io
 import os
+import struct
 import sys
+import tempfile
 from pathlib import Path
 
 from tetris_ui import GAME_TITLE, __version__  # no pygame: the package imports nothing
@@ -27,6 +31,11 @@ STALE_EXES = (DIST_DIR / "tetris.exe",)
 # sources, so tetris_ui.render finds them next to its module in both cases.
 FONT_DIR = PROJECT_ROOT / "tetris_ui" / "fonts"
 FONT_DATA = f"{FONT_DIR}{os.pathsep}tetris_ui/fonts"
+# The game's icon: inside the exe for the window (tetris_ui.app loads it), and as the exe's
+# own icon, made by icon_ico_bytes() in every size Windows asks an .ico for.
+ICON_FILE = PROJECT_ROOT / "tetris_ui" / "icon.png"
+ICON_DATA = f"{ICON_FILE}{os.pathsep}tetris_ui"
+ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 PYINSTALLER_ARGS = [
     str(PROJECT_ROOT / "launcher.py"),
@@ -41,6 +50,7 @@ PYINSTALLER_ARGS = [
     "--paths", str(PROJECT_ROOT),
     "--version-file", str(VERSION_FILE),
     "--add-data", FONT_DATA,
+    "--add-data", ICON_DATA,
 ]
 
 
@@ -97,6 +107,41 @@ def write_version_file(path: Path = VERSION_FILE) -> bool:
     return True
 
 
+def _shrunk(pygame, image, size: int):
+    """The square image scaled to size x size. smoothscale shrinks exactly only by 2, and
+    loses a little alpha inside the tile for other factors (1024 -> 24), so the image is
+    first scaled to size times a power of 2 and then halved step by step."""
+    step = size
+    while step < image.get_width():
+        step *= 2
+    image = pygame.transform.smoothscale(image, (step, step))
+    while step > size:
+        step //= 2
+        image = pygame.transform.smoothscale(image, (step, step))
+    return image
+
+
+def icon_ico_bytes(png: Path = ICON_FILE, sizes: tuple[int, ...] = ICON_SIZES) -> bytes:
+    """A Windows .ico with png scaled to each of sizes, every image stored as PNG."""
+    import pygame  # only here: the rest of the build script works without it
+
+    image = pygame.image.load(png)
+    images = []
+    for size in sizes:
+        buffer = io.BytesIO()
+        pygame.image.save(_shrunk(pygame, image, size), buffer, "png")
+        images.append(buffer.getvalue())
+    header = struct.pack("<HHH", 0, 1, len(images))  # reserved, type 1 = icon, count
+    offset = len(header) + 16 * len(images)
+    entries = []
+    for size, data in zip(sizes, images):
+        # width, height (0 means 256), colors, reserved, planes, bits per pixel, size, offset
+        entries.append(struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32,
+                                   len(data), offset))
+        offset += len(data)
+    return header + b"".join(entries) + b"".join(images)
+
+
 def main() -> int:
     """Run PyInstaller and return 0 if the exe was built, non-zero otherwise."""
     try:
@@ -107,7 +152,10 @@ def main() -> int:
     if write_version_file():
         print(f"updated {VERSION_FILE.name} for version {__version__}: commit it")
     try:
-        PyInstaller.__main__.run(PYINSTALLER_ARGS)
+        with tempfile.TemporaryDirectory() as temp:
+            icon = Path(temp) / f"{EXE_NAME}.ico"
+            icon.write_bytes(icon_ico_bytes())
+            PyInstaller.__main__.run([*PYINSTALLER_ARGS, "--icon", str(icon)])
     except SystemExit as exit_:  # PyInstaller reports failures by exiting
         return exit_.code if isinstance(exit_.code, int) else 1
     except Exception as error:  # noqa: BLE001 - any build failure must give a non-zero code

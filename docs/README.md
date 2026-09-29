@@ -14,6 +14,7 @@ Tetris Shmetris — классический тетрис для Windows на Py
 | Запустить тесты | `.venv\Scripts\python -m pytest` |
 | Собрать `dist\tetris_shmetris.exe` | `.venv\Scripts\python -m pip install -r requirements-build.txt`, затем `.venv\Scripts\python build_exe.py` |
 | Проверить сборку автотестом (долго) | `set TETRIS_BUILD_TEST=1` и `.venv\Scripts\python -m pytest tests/test_build.py` |
+| Выпустить релиз на GitHub | `git tag v<версия>` и `git push origin v<версия>`, подробнее — [build.md](build.md#релиз-на-github) |
 
 ## Документы
 
@@ -23,7 +24,7 @@ Tetris Shmetris — классический тетрис для Windows на Py
 | [architecture.md](architecture.md) | Пакеты и модули, их зависимости, что происходит за один кадр, фазы экрана, где хранятся данные |
 | [game-logic.md](game-logic.md) | Правила игры по коду: поле, фигуры, вращение, команды, фиксация, линии, очки, уровни, гравитация, конец игры, рекорды |
 | [interface.md](interface.md) | Управление и автоповтор, главное меню и экран настроек, список клавиш, меню паузы, экран конца игры, раскладка экрана, звук, проверка звуков, хранение настроек |
-| [build.md](build.md) | Сборка `tetris_shmetris.exe`, её проверка и известные ограничения |
+| [build.md](build.md) | Сборка `tetris_shmetris.exe`, её проверка, релизы на GitHub и известные ограничения |
 
 ## Структура проекта
 
@@ -35,6 +36,8 @@ docs/            эта документация
 openspec/        спецификации (specs/) и история изменений (changes/archive/)
 build_exe.py     сборка exe через PyInstaller
 launcher.py      точка входа exe
+release_notes.py текст релиза GitHub из CHANGELOG.md
+.github/         workflow релиза: сборка exe по тегу v<версия>
 version_info.txt ресурс версии exe (обновляет build_exe.py из tetris_ui.__version__)
 ```
 

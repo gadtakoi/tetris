@@ -455,6 +455,15 @@ def test_window_size_and_title():
     assert pygame.display.get_caption()[0] == "Tetris Shmetris"
 
 
+def test_window_icon_is_the_logo():
+    icon = pygame.image.load(app.ICON_FILE)
+    width, height = icon.get_size()
+    assert width == height >= 256  # enough for the exe's biggest icon
+    assert icon.get_at((0, 0)).a == 0  # rounded corners
+    assert tuple(icon.get_at((width // 2, 40)))[:3] == layout.WINDOW_BG
+    assert app.ICON_FILE.parent == render.FONT_DIR.parent  # inside the package, as the fonts
+
+
 @pytest.fixture
 def data_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("TETRIS_DATA_DIR", str(tmp_path))

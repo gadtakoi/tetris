@@ -1,0 +1,70 @@
+# Builds tetris_shmetris.exe and publishes a GitHub release when a version tag is pushed:
+#   git tag v3.0.0 && git push origin v3.0.0
+# The tag must be "v" + tetris_ui.__version__, and CHANGELOG.md must have a section for it:
+# the section becomes the release text. Run by hand (Actions -> Release -> Run workflow),
+# it only builds the exe and keeps it as a workflow artifact, without a release.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      PYTHONUTF8: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt -r requirements-build.txt
+
+      - name: Check the tag and take the release text from CHANGELOG.md
+        if: github.ref_type == 'tag'
+        run: python release_notes.py "$GITHUB_REF_NAME" > release-notes.md
+
+      - name: Run the tests
+        run: python -m pytest -q
+
+      - name: Build the exe and test it
+        env:
+          TETRIS_BUILD_TEST: "1"
+        run: python -m pytest tests/test_build.py -q
+
+      - name: Checksum
+        working-directory: dist
+        run: sha256sum tetris_shmetris.exe > tetris_shmetris.exe.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tetris_shmetris
+          path: |
+            dist/tetris_shmetris.exe
+            dist/tetris_shmetris.exe.sha256
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          dist/tetris_shmetris.exe dist/tetris_shmetris.exe.sha256
+          --title "Tetris Shmetris ${GITHUB_REF_NAME#v}"
+          --notes-file release-notes.md
+          --verify-tag

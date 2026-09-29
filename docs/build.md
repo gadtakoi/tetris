@@ -18,15 +18,16 @@
 - `build_exe.py` запускает PyInstaller с параметрами `--onefile --windowed --name tetris_shmetris --clean --noconfirm` и `--version-file` (см. «Версия»): один файл, без окна консоли, каждый раз с чистого листа. Скрипт возвращает 0 только если `tetris_shmetris.exe` действительно появился. Имя файла задаёт `build_exe.EXE_NAME`, а название игры в ресурсе версии — `tetris_ui.GAME_TITLE`.
 - Точка входа — `launcher.py`, который вызывает `tetris_ui.cli.run()`, как и `python -m tetris_ui`. Имя `tetris.py` для него не подходит: оно совпало бы с пакетом `tetris`.
 - pygame-ce поставляет собственный хук PyInstaller, поэтому библиотеки SDL попадают в exe автоматически. Звуки синтезируются в коде.
-- Единственные файлы-ресурсы — шрифты игры в `tetris_ui/fonts/`: Unbounded (SemiBold, ExtraBold) и Onest (Regular, SemiBold) и их лицензия `OFL.txt` (SIL Open Font License 1.1, её текст обязан распространяться вместе со шрифтами). `build_exe.py` передаёт PyInstaller `--add-data "<проект>/tetris_ui/fonts;tetris_ui/fonts"` (`build_exe.FONT_DATA`), поэтому внутри exe папка лежит по тому же пути относительно пакета, что и в исходниках, и `tetris_ui.render` находит шрифты рядом со своим модулем в обоих случаях. Рядом с exe ничего не появляется: при запуске onefile-сборка распаковывает всё во временную папку и удаляет её после выхода.
+- **Иконка.** Логотип игры лежит в `tetris_ui/icon.png` (1024 × 1024, углы прозрачные). Он сделан один раз из `shmetris.png` в корне проекта: белые углы за скруглённой плиткой стали прозрачными. `build_exe.py` при каждой сборке делает из него `.ico` с размерами 16, 24, 32, 48, 64, 128 и 256 px (`build_exe.icon_ico_bytes()`, через pygame, без Pillow) во временной папке и передаёт PyInstaller `--icon` — это иконка exe в Проводнике. Сам `icon.png` тоже попадает в exe (`--add-data`, `build_exe.ICON_DATA`): `tetris_ui.app.create_window()` ставит его иконкой окна (заголовок и панель задач), уменьшив до 32 px, — так и при запуске из исходников.
+- Кроме иконки, файлы-ресурсы — шрифты игры в `tetris_ui/fonts/`: Unbounded (SemiBold, ExtraBold) и Onest (Regular, SemiBold) и их лицензия `OFL.txt` (SIL Open Font License 1.1, её текст обязан распространяться вместе со шрифтами). `build_exe.py` передаёт PyInstaller `--add-data "<проект>/tetris_ui/fonts;tetris_ui/fonts"` (`build_exe.FONT_DATA`), поэтому внутри exe папка лежит по тому же пути относительно пакета, что и в исходниках, и `tetris_ui.render` находит шрифты рядом со своим модулем в обоих случаях. Рядом с exe ничего не появляется: при запуске onefile-сборка распаковывает всё во временную папку и удаляет её после выхода.
 - Onest в Google Fonts есть только вариативным файлом (`Onest[wght].ttf`), а pygame-ce не умеет выбирать значение оси `wght`, поэтому в папке лежат статические начертания, сделанные из него один раз: `fonttools varLib.instancer Onest[wght].ttf wght=400 --update-name-table` (и `wght=600`). Unbounded взят готовыми статическими файлами из репозитория `googlefonts/unbounded`. fontTools для игры и сборки не нужен.
 - В exe без консоли `sys.stderr` равен `None`, поэтому предупреждения выводятся через `cli.warn()`, который в этом случае молчит.
 - Данные (рекорды, настройки) хранятся в `%APPDATA%\tetris_shmetris`, а не рядом с exe: файл можно переносить куда угодно, а рядом с ним ничего не создаётся.
 
 ## Версия
 
-Номер версии задан в одном месте — `__version__` в `tetris_ui/__init__.py`, сейчас 3.0.0, в формате MAJOR.MINOR.PATCH. Его видно в двух местах:
-- **в игре** — надпись «v3.0.0» в правом нижнем углу главного меню;
+Номер версии задан в одном месте — `__version__` в `tetris_ui/__init__.py`, сейчас 3.1.0, в формате MAJOR.MINOR.PATCH. Его видно в двух местах:
+- **в игре** — надпись «v3.1.0» в правом нижнем углу главного меню;
 - **в свойствах exe** — ресурс версии Windows из файла `version_info.txt` в корне проекта.
 
 Как устроен `version_info.txt`:
@@ -60,6 +61,26 @@ set TETRIS_BUILD_TEST=1
 Тест собирает exe, проверяет удаление старого `tetris.exe`, копирует `tetris_shmetris.exe` в пустую временную папку, запускает его без экрана (`SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`, `--max-frames 30`) и проверяет код 0 и то, что рядом с exe ничего не появилось. Так же он запускает exe с `--sound-check --max-frames 30`: код 0, рядом с exe пусто, а в папке данных только отчёт `sound-check.json`. Последний тест читает свойства собранного exe через PowerShell (`(Get-Item …).VersionInfo`) и сверяет версию файла и продукта, название и исходное имя с `tetris_ui.__version__` и надписью в главном меню.
 
 Вручную — дважды щёлкнуть `dist\tetris_shmetris.exe`: открывается окно «Tetris Shmetris» с главным меню, консоли нет.
+
+## Релиз на GitHub
+
+Релизы собирает GitHub Actions — [.github/workflows/release.yml](../.github/workflows/release.yml), на `windows-latest` с Python 3.14. Выпустить версию:
+
+1. Поднять `__version__` и записать раздел `## [<версия>]` в `CHANGELOG.md` (скилл `version-changelog`), закоммитить вместе с `version_info.txt` и отправить в `master`.
+2. Поставить и отправить тег `v<версия>`:
+   ```bat
+   git tag v3.0.0
+   git push origin v3.0.0
+   ```
+
+Что делает workflow после тега:
+- `release_notes.py` проверяет, что тег равен `v` + `__version__`, и берёт текст релиза из раздела этой версии в `CHANGELOG.md`. Если тег не совпадает с версией или раздела нет, workflow останавливается до сборки;
+- запускает все тесты, затем сборочный тест (`TETRIS_BUILD_TEST=1`): он собирает exe и проверяет запуск без экрана и свойства файла;
+- создаёт релиз «Tetris Shmetris <версия>» с файлами `tetris_shmetris.exe` и `tetris_shmetris.exe.sha256` (контрольная сумма SHA-256) и сохраняет их же как артефакт запуска.
+
+Запуск вручную (Actions → Release → Run workflow) собирает и проверяет exe так же, но релиз не создаёт: файл остаётся только артефактом запуска. Так можно проверить сборку перед тегом.
+
+Проверить текст релиза локально: `.venv\Scripts\python release_notes.py v3.0.0`.
 
 ## Известные ограничения
 

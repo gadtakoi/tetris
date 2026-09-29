@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pygame
 
 from tetris.game import Game
@@ -9,6 +11,9 @@ from tetris_ui import layout, render, storage
 from tetris_ui.audio import Audio
 from tetris_ui.input import Controller, Key
 from tetris_ui.soundcheck import CheckKey, SoundCheck
+
+ICON_FILE = Path(__file__).parent / "icon.png"  # inside the exe too: build_exe.py adds it
+WINDOW_ICON_SIZE = 32  # the icon is drawn this big; Windows shrinks it for the title bar
 
 KEY_MAP: dict[int, Key] = {
     pygame.K_LEFT: Key.LEFT,
@@ -55,7 +60,10 @@ SOUND_CHECK_KEYS: dict[int, CheckKey] = {
 
 
 def create_window() -> pygame.Surface:
-    """Open the game window at WINDOW_SIZE with the game title."""
+    """Open the game window at WINDOW_SIZE with the game title and icon."""
+    # The icon goes first: some systems take it only for a window that is not shown yet.
+    icon = pygame.image.load(ICON_FILE)
+    pygame.display.set_icon(pygame.transform.smoothscale(icon, (WINDOW_ICON_SIZE,) * 2))
     screen = pygame.display.set_mode(layout.WINDOW_SIZE)
     pygame.display.set_caption(layout.TITLE)
     return screen

@@ -1,6 +1,8 @@
+import io
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -19,7 +21,7 @@ def test_version_is_major_minor_patch():
 
 
 def test_current_version():
-    assert __version__ == "3.0.0"
+    assert __version__ == "3.1.0"
 
 
 def test_package_import_does_not_load_pygame():
@@ -95,6 +97,28 @@ def test_build_puts_the_fonts_inside_the_exe():
     assert Path(source) == PROJECT_ROOT / "tetris_ui" / "fonts"
     assert target == "tetris_ui/fonts"
     assert (Path(source) / "OFL.txt").is_file()
+
+
+def test_build_puts_the_icon_inside_the_exe():
+    args = build_exe.PYINSTALLER_ARGS
+    data = [args[i + 1] for i, arg in enumerate(args) if arg == "--add-data"]
+    assert data[1].split(os.pathsep) == [str(PROJECT_ROOT / "tetris_ui" / "icon.png"), "tetris_ui"]
+    assert build_exe.ICON_FILE.is_file()
+
+
+def test_exe_icon_has_every_size_windows_asks_for():
+    pygame = pytest.importorskip("pygame")
+    ico = build_exe.icon_ico_bytes()
+    assert struct.unpack_from("<HHH", ico) == (0, 1, len(build_exe.ICON_SIZES))
+    for i, size in enumerate(build_exe.ICON_SIZES):
+        width, height, _, _, planes, bits, length, offset = struct.unpack_from(
+            "<BBBBHHII", ico, 6 + 16 * i)
+        assert (width, height, planes, bits) == (size % 256, size % 256, 1, 32)
+        image = pygame.image.load(io.BytesIO(ico[offset:offset + length]), "icon.png")
+        assert image.get_size() == (size, size)
+        assert image.get_at((0, 0)).a == 0  # the rounded tile leaves the corners clear
+        assert image.get_at((size // 2, size // 2)).a == 255
+    assert offset + length == len(ico)
 
 
 def test_committed_version_file_is_up_to_date():

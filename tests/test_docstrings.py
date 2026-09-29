@@ -11,6 +11,7 @@ SOURCES = sorted(
         *PROJECT_ROOT.glob("tetris_ui/*.py"),
         PROJECT_ROOT / "build_exe.py",
         PROJECT_ROOT / "launcher.py",
+        PROJECT_ROOT / "release_notes.py",
     ]
 )
 

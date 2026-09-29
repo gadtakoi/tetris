@@ -6,4 +6,4 @@ GAME_TITLE = "Tetris Shmetris"
 
 # The game's version, MAJOR.MINOR.PATCH: the main menu shows it and build_exe.py writes it
 # into the exe's version resource. Raise it by hand before building a new release.
-__version__ = "3.0.0"
+__version__ = "3.1.0"
