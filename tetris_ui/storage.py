@@ -11,14 +11,16 @@ from tetris.highscores import HighScores
 from tetris_ui.cli import warn
 from tetris_ui.settings import Settings
 
-APP_DIR_NAME = "tetris"
+# Its own constant, not the exe name: renaming the game must not change where the data is.
+APP_DIR_NAME = "tetris_shmetris"
 HIGH_SCORES_FILE = "highscores.json"
 SETTINGS_FILE = "settings.json"
 SOUND_CHECK_FILE = "sound-check.json"
 
 
 def data_dir() -> Path:
-    """TETRIS_DATA_DIR if set, else %APPDATA%\\tetris, else ~/.local/share/tetris."""
+    """TETRIS_DATA_DIR if set, else %APPDATA%\\tetris_shmetris, else
+    ~/.local/share/tetris_shmetris."""
     override = os.environ.get("TETRIS_DATA_DIR")
     if override:
         return Path(override)

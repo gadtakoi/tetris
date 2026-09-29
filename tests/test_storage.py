@@ -45,13 +45,47 @@ def test_data_dir_override(monkeypatch, tmp_path):
 def test_data_dir_uses_appdata(monkeypatch, tmp_path):
     monkeypatch.delenv("TETRIS_DATA_DIR", raising=False)
     monkeypatch.setenv("APPDATA", str(tmp_path))
-    assert storage.data_dir() == tmp_path / "tetris"
+    assert storage.data_dir() == tmp_path / "tetris_shmetris"
 
 
 def test_data_dir_without_appdata(monkeypatch):
     monkeypatch.delenv("TETRIS_DATA_DIR", raising=False)
     monkeypatch.delenv("APPDATA", raising=False)
-    assert storage.data_dir() == Path.home() / ".local" / "share" / "tetris"
+    assert storage.data_dir() == Path.home() / ".local" / "share" / "tetris_shmetris"
+
+
+def test_every_data_file_goes_to_the_tetris_shmetris_folder(monkeypatch, tmp_path):
+    monkeypatch.delenv("TETRIS_DATA_DIR", raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    folder = tmp_path / "tetris_shmetris"
+    assert storage.high_scores_path() == folder / "highscores.json"
+    assert storage.settings_path() == folder / "settings.json"
+    assert storage.sound_check_path() == folder / "sound-check.json"
+    table = HighScores()
+    table.add(Entry("Иван", 1200, 13, 1))
+    assert storage.save(table, storage.high_scores_path())
+    assert storage.load(folder / "highscores.json").entries == (Entry("Иван", 1200, 13, 1),)
+
+
+def test_old_tetris_folder_is_neither_read_nor_changed(monkeypatch, tmp_path):
+    monkeypatch.delenv("TETRIS_DATA_DIR", raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    old = tmp_path / "tetris"
+    old.mkdir()
+    old_table = HighScores()
+    old_table.add(Entry("Иван", 1200, 13, 1))
+    (old / "highscores.json").write_text(old_table.to_json(), encoding="utf-8")
+    (old / "settings.json").write_text('{"version": 1, "language": "ru"}', encoding="utf-8")
+    before = {path.name: path.read_bytes() for path in old.iterdir()}
+
+    assert storage.load(storage.high_scores_path()).entries == ()
+    assert storage.load_settings(storage.settings_path()) == Settings()
+
+    table = HighScores()
+    table.add(Entry("Ann", 10, 0, 0))
+    assert storage.save(table, storage.high_scores_path())
+    assert storage.save_settings(Settings(music_on=False), storage.settings_path())
+    assert {path.name: path.read_bytes() for path in old.iterdir()} == before
 
 
 def test_save_failure_is_reported_not_raised(tmp_path, capsys):
