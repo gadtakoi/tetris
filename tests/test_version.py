@@ -21,7 +21,7 @@ def test_version_is_major_minor_patch():
 
 
 def test_current_version():
-    assert __version__ == "3.1.0"
+    assert __version__ == "3.2.0"
 
 
 def test_package_import_does_not_load_pygame():
@@ -76,34 +76,91 @@ def test_pyinstaller_reads_the_version_info(tmp_path):
     }
 
 
-def test_exe_name():
-    args = build_exe.PYINSTALLER_ARGS
+PLATFORMS = ("win32", "darwin", "linux")
+
+
+@pytest.mark.parametrize("platform", PLATFORMS)
+def test_exe_name(platform):
+    args = build_exe.pyinstaller_args(platform)
     assert args[args.index("--name") + 1] == build_exe.EXE_NAME == "tetris_shmetris"
+
+
+def test_what_each_system_builds():
+    dist = PROJECT_ROOT / "dist"
+    assert build_exe.built_path("win32") == dist / "tetris_shmetris.exe"
+    assert build_exe.built_path("darwin") == dist / "tetris_shmetris.app"
+    assert build_exe.built_path("linux") == dist / "tetris_shmetris"
+
+
+def test_windows_and_linux_build_one_file_and_macos_an_app():
+    windows, macos, linux = (build_exe.pyinstaller_args(p) for p in PLATFORMS)
+    assert {"--onefile", "--windowed"} <= set(windows)
+    assert {"--onedir", "--windowed"} <= set(macos) and "--onefile" not in macos
+    assert macos[macos.index("--osx-bundle-identifier") + 1] == build_exe.BUNDLE_ID
+    assert "--onefile" in linux and "--windowed" not in linux
 
 
 def test_only_the_first_builds_exe_is_removed():
     assert build_exe.STALE_EXES == (PROJECT_ROOT / "dist" / "tetris.exe",)
 
 
-def test_build_passes_the_version_file():
-    args = build_exe.PYINSTALLER_ARGS
+def test_only_the_windows_build_gets_the_version_file():
+    args = build_exe.pyinstaller_args("win32")
     assert args[args.index("--version-file") + 1] == str(build_exe.VERSION_FILE)
     assert build_exe.VERSION_FILE == PROJECT_ROOT / "version_info.txt"
+    assert "--version-file" not in build_exe.pyinstaller_args("darwin")
+    assert "--version-file" not in build_exe.pyinstaller_args("linux")
 
 
-def test_build_puts_the_fonts_inside_the_exe():
-    args = build_exe.PYINSTALLER_ARGS
+@pytest.mark.parametrize("platform", PLATFORMS)
+def test_build_puts_the_fonts_inside(platform):
+    args = build_exe.pyinstaller_args(platform)
     source, target = args[args.index("--add-data") + 1].split(os.pathsep)
     assert Path(source) == PROJECT_ROOT / "tetris_ui" / "fonts"
     assert target == "tetris_ui/fonts"
     assert (Path(source) / "OFL.txt").is_file()
 
 
-def test_build_puts_the_icon_inside_the_exe():
-    args = build_exe.PYINSTALLER_ARGS
+@pytest.mark.parametrize("platform", PLATFORMS)
+def test_build_puts_the_icon_inside(platform):
+    args = build_exe.pyinstaller_args(platform)
     data = [args[i + 1] for i, arg in enumerate(args) if arg == "--add-data"]
     assert data[1].split(os.pathsep) == [str(PROJECT_ROOT / "tetris_ui" / "icon.png"), "tetris_ui"]
     assert build_exe.ICON_FILE.is_file()
+
+
+def test_icon_file_for_each_system(tmp_path):
+    pytest.importorskip("pygame")
+    assert build_exe.write_icon(tmp_path, "win32") == tmp_path / "tetris_shmetris.ico"
+    assert build_exe.write_icon(tmp_path, "darwin") == tmp_path / "tetris_shmetris.icns"
+    assert build_exe.write_icon(tmp_path, "linux") is None
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "tetris_shmetris.icns", "tetris_shmetris.ico"]
+
+
+def test_app_icon_has_every_size_macos_asks_for():
+    pygame = pytest.importorskip("pygame")
+    icns = build_exe.icon_icns_bytes()
+    assert icns[:4] == b"icns" and struct.unpack_from(">I", icns, 4)[0] == len(icns)
+    offset = 8
+    for kind, size in build_exe.ICNS_TYPES:
+        assert icns[offset:offset + 4] == kind.encode("ascii")
+        length = struct.unpack_from(">I", icns, offset + 4)[0]
+        image = pygame.image.load(io.BytesIO(icns[offset + 8:offset + length]), "icon.png")
+        assert image.get_size() == (size, size)
+        assert image.get_at((0, 0)).a == 0  # the rounded tile leaves the corners clear
+        offset += length
+    assert offset == len(icns)
+
+
+def test_app_info_names_the_game_and_its_version():
+    assert build_exe.app_info("2.13.4") == {
+        "CFBundleName": "Tetris Shmetris",
+        "CFBundleDisplayName": "Tetris Shmetris",
+        "CFBundleShortVersionString": "2.13.4",
+        "CFBundleVersion": "2.13.4",
+    }
+    assert build_exe.app_info()["CFBundleShortVersionString"] == __version__
 
 
 def test_exe_icon_has_every_size_windows_asks_for():

@@ -2,6 +2,14 @@
 
 Заметные изменения Tetris Shmetris. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), номер версии — MAJOR.MINOR.PATCH по правилам [docs/build.md](docs/build.md).
 
+## [3.2.0] — 2026-09-29
+
+### Добавлено
+- Игра для macOS (Apple silicon) и Linux (x86_64): в релизе на GitHub теперь три сборки — `tetris_shmetris.exe`, `tetris_shmetris-macos-arm64.zip` и `tetris_shmetris-linux-x86_64.tar.gz`, у каждой файл с контрольной суммой SHA-256.
+
+### Изменено
+- Персиковая плашка нового рекорда в таблице стала чуть уже по бокам, чтобы самая длинная строка таблицы помещалась на всех системах.
+
 ## [3.1.0] — 2026-09-29
 
 ### Добавлено

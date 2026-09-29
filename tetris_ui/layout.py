@@ -208,7 +208,9 @@ OVERLAY_LINES: dict[str, tuple[int, int]] = {
     "table-hint": (20, 2),
 }
 BUTTON_PAD_X = 18  # text inside a pause button
-PLAQUE_PAD_X, PLAQUE_PAD_Y = 6, 3  # a peach plaque around a text
+# A peach plaque around a text. 4 px at the sides leaves the longest table row a few pixels
+# to spare at 14 px: Linux's FreeType draws it 1 px wider than Windows'.
+PLAQUE_PAD_X, PLAQUE_PAD_Y = 4, 3
 
 # --- Full-window screens ------------------------------------------------------------
 

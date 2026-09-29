@@ -75,7 +75,7 @@
 
 | Экран | Заголовок | Строки |
 |---|---|---|
-| Главное меню | логотип 64 × 64 в (448, 64), под ним «Tetris Shmetris» (`layout.TITLE` из `tetris_ui.GAME_TITLE`), Unbounded 40 px, y = 168 | New game, High scores, Settings, Controls, Guide, Quit с y = 250, шаг 58, кнопка 300 × 46; в правом нижнем углу окна (угол надписи — точка (944, 708)) версия «v3.1.0» персиковым цветом — `layout.VERSION_TEXT` из `tetris_ui.__version__`, одинаковая на обоих языках |
+| Главное меню | логотип 64 × 64 в (448, 64), под ним «Tetris Shmetris» (`layout.TITLE` из `tetris_ui.GAME_TITLE`), Unbounded 40 px, y = 168 | New game, High scores, Settings, Controls, Guide, Quit с y = 250, шаг 58, кнопка 300 × 46; в правом нижнем углу окна (угол надписи — точка (944, 708)) версия «v3.2.0» персиковым цветом — `layout.VERSION_TEXT` из `tetris_ui.__version__`, одинаковая на обоих языках |
 | High scores | «HIGH SCORES», y = 100 | «<место>. <имя> <очки>» или «No records yet» с y = 168, шаг 40 |
 | Settings | «Settings», y = 100 | «<название>: <значение>» и «Back» с y = 160, шаг 50, кнопка 480 × 42 |
 | Controls и экран клавиш по F1 | «Tetris Shmetris», y = 100 | 14 строк `layout.HOTKEYS`, верх с y = 146, шаг 30; клавиши от x = 220, действия от x = 440 |

@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(3, 1, 0, 0),
-    prodvers=(3, 1, 0, 0),
+    filevers=(3, 2, 0, 0),
+    prodvers=(3, 2, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -15,11 +15,11 @@ VSVersionInfo(
         '040904B0',
         [
           StringStruct('FileDescription', 'Tetris Shmetris'),
-          StringStruct('FileVersion', '3.1.0.0'),
+          StringStruct('FileVersion', '3.2.0.0'),
           StringStruct('InternalName', 'tetris_shmetris'),
           StringStruct('OriginalFilename', 'tetris_shmetris.exe'),
           StringStruct('ProductName', 'Tetris Shmetris'),
-          StringStruct('ProductVersion', '3.1.0'),
+          StringStruct('ProductVersion', '3.2.0'),
         ],
       ),
     ]),
