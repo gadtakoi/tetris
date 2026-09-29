@@ -20,7 +20,7 @@ context: |
       Тест tests/test_architecture.py проверяет, что pygame сюда не попадает.
     - tetris_ui/ — слой представления: читает состояние логики и передаёт
       ей команды; правил игры в нём нет. Модули input.py, menus.py, texts.py, guide.py,
-      layout.py, settings.py, synth.py, music.py, soundcheck.py — без pygame и
+      layout.py, settings.py, synth.py, music.py, soundcheck.py, signing.py — без pygame и
       тестируются напрямую; render.py,
       app.py, audio.py — pygame, проверяются дымовыми тестами с
       SDL_VIDEODRIVER/SDL_AUDIODRIVER=dummy.
@@ -30,6 +30,10 @@ context: |
     - Рекорды и настройки хранятся в %APPDATA%\tetris_shmetris\ (highscores.json,
       settings.json; папка переопределяется переменной TETRIS_DATA_DIR);
       там же отчёт проверки звуков sound-check.json.
+    - Таблица рекордов подписана HMAC-SHA256 (tetris_ui/signing.py, формат
+      version 2 с полем sig) ключом игры и ID установки из файла install-id
+      в той же папке; правленая, чужая или старая таблица читается как
+      пустая с предупреждением в консоль.
     - Запуск: python -m tetris_ui (начинается с главного меню, F1 в партии —
       список клавиш, F2 — инструкция в игре);
       проверка звуков: python -m tetris_ui --sound-check;

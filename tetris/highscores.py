@@ -1,14 +1,13 @@
-"""High score table rules: ordering, qualification, player names and JSON form."""
+"""High score table rules: ordering, qualification, player names and the records that
+go to the file (the file itself, its format and its signature are tetris_ui.storage's)."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 MAX_ENTRIES = 10
 MAX_NAME_LENGTH = 10
 DEFAULT_NAME = "PLAYER"
-FORMAT_VERSION = 1
 
 _EXTRA_NAME_CHARS = " -_"
 
@@ -55,33 +54,20 @@ class HighScores:
         del self._entries[MAX_ENTRIES:]
         return place
 
-    def to_json(self) -> str:
-        """The table as the JSON text stored in highscores.json."""
-        return json.dumps(
-            {
-                "version": FORMAT_VERSION,
-                "entries": [
-                    {"name": e.name, "score": e.score, "lines": e.lines, "level": e.level}
-                    for e in self._entries
-                ],
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
+    def to_records(self) -> list[dict]:
+        """The entries as plain records with name, score, lines and level, best first."""
+        return [
+            {"name": e.name, "score": e.score, "lines": e.lines, "level": e.level}
+            for e in self._entries
+        ]
 
     @classmethod
-    def from_json(cls, text: str) -> HighScores:
-        """Parse a saved table; anything unreadable yields an empty table."""
-        try:
-            data = json.loads(text)
-        except ValueError:
+    def from_records(cls, raw: object) -> HighScores:
+        """A table from records read back from a file: anything but a list gives an empty
+        table, and invalid records are skipped."""
+        if not isinstance(raw, list):
             return cls()
-        if not isinstance(data, dict) or data.get("version") != FORMAT_VERSION:
-            return cls()
-        raw_entries = data.get("entries")
-        if not isinstance(raw_entries, list):
-            return cls()
-        entries = [e for e in map(_parse_entry, raw_entries) if e is not None]
+        entries = [e for e in map(_parse_entry, raw) if e is not None]
         entries.sort(key=lambda e: e.score, reverse=True)  # stable: file order breaks ties
         return cls(tuple(entries))
 
@@ -96,7 +82,7 @@ class HighScores:
 
 
 def _parse_entry(raw: object) -> Entry | None:
-    """An Entry from one raw JSON object, or None if any field is missing or invalid."""
+    """An Entry from one raw record, or None if any field is missing or invalid."""
     if not isinstance(raw, dict):
         return None
     name = raw.get("name")

@@ -64,13 +64,16 @@ def create_window() -> pygame.Surface:
 def create_controller() -> Controller:
     """A controller that starts in the main menu, with the saved high scores and
     settings; every change to them is written back to the data folder.
+
+    The table is signed for this installation, whose ID is read (or created) first.
     """
     scores_path = storage.high_scores_path()
     settings_path = storage.settings_path()
+    install_id = storage.load_install_id(storage.install_id_path())
     return Controller(
         Game(),
-        storage.load(scores_path),
-        on_save=lambda scores: storage.save(scores, scores_path),
+        storage.load(scores_path, install_id),
+        on_save=lambda scores: storage.save(scores, scores_path, install_id),
         settings=storage.load_settings(settings_path),
         on_settings_change=lambda settings: storage.save_settings(settings, settings_path),
         start_in_menu=True,

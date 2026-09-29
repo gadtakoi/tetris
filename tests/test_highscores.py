@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from tetris.highscores import (
@@ -91,38 +89,44 @@ def test_name_is_trimmed():
     assert final_name(" Ann ") == "Ann"
 
 
-# --- JSON ------------------------------------------------------------------
+# --- Records ---------------------------------------------------------------
 
 
-def test_json_round_trip():
+def test_records_round_trip():
     table = HighScores()
     table.add(Entry("Иван", 1200, 13, 1))
     table.add(Entry("Ann", 340, 3, 0))
-    assert HighScores.from_json(table.to_json()).entries == table.entries
+    records = table.to_records()
+    assert records == [
+        {"name": "Иван", "score": 1200, "lines": 13, "level": 1},
+        {"name": "Ann", "score": 340, "lines": 3, "level": 0},
+    ]
+    assert HighScores.from_records(records).entries == table.entries
 
 
-def test_invalid_json_gives_empty_table():
-    assert HighScores.from_json("not json").entries == ()
-
-
-def test_invalid_entry_is_skipped():
-    text = json.dumps({"version": 1, "entries": [
+def test_invalid_record_is_skipped():
+    raw = [
         {"name": "GOOD", "score": 100, "lines": 1, "level": 0},
         {"name": "BAD", "score": "abc", "lines": 1, "level": 0},
-    ]})
-    assert HighScores.from_json(text).entries == (Entry("GOOD", 100, 1, 0),)
+    ]
+    assert HighScores.from_records(raw).entries == (Entry("GOOD", 100, 1, 0),)
 
 
-def test_only_best_ten_entries_are_loaded():
+def test_only_best_ten_records_are_loaded():
     raw = [{"name": f"P{i}", "score": 10 * i, "lines": 0, "level": 0} for i in range(1, 13)]
-    table = HighScores.from_json(json.dumps({"version": 1, "entries": raw}))
+    table = HighScores.from_records(raw)
     assert [e.score for e in table.entries] == [120, 110, 100, 90, 80, 70, 60, 50, 40, 30]
 
 
-@pytest.mark.parametrize("text", [
-    json.dumps({"version": 2, "entries": []}),
-    json.dumps([1, 2, 3]),
-    json.dumps({"version": 1, "entries": "nope"}),
-])
-def test_unknown_format_gives_empty_table(text):
-    assert HighScores.from_json(text).entries == ()
+def test_equal_scores_keep_the_order_of_the_records():
+    raw = [
+        {"name": "LOW", "score": 10, "lines": 0, "level": 0},
+        {"name": "ANNA", "score": 500, "lines": 0, "level": 0},
+        {"name": "BORIS", "score": 500, "lines": 0, "level": 0},
+    ]
+    assert [e.name for e in HighScores.from_records(raw).entries] == ["ANNA", "BORIS", "LOW"]
+
+
+@pytest.mark.parametrize("raw", [None, "nope", 42, {"entries": []}])
+def test_anything_but_a_list_gives_an_empty_table(raw):
+    assert HighScores.from_records(raw).entries == ()

@@ -14,7 +14,7 @@ from tetris.board import HEIGHT, HIDDEN_ROWS, WIDTH  # noqa: E402
 from tetris.game import ActivePiece, Game  # noqa: E402
 from tetris.highscores import Entry, HighScores  # noqa: E402
 from tetris.pieces import PieceType  # noqa: E402
-from tetris_ui import app, guide, layout, menus, render  # noqa: E402
+from tetris_ui import app, guide, layout, menus, render, storage  # noqa: E402
 from tetris_ui.audio import Audio  # noqa: E402
 from tetris_ui.input import Controller, Key, Phase, Sound  # noqa: E402
 from tetris_ui.settings import Settings  # noqa: E402
@@ -460,6 +460,15 @@ def test_quit_item_ends_main(data_dir):
     start = time.monotonic()
     assert app.main(max_frames=600) == 0  # 600 frames would take ~10 s
     assert time.monotonic() - start < 3
+
+
+def test_signed_record_is_loaded_by_the_same_installation(data_dir):
+    assert app.create_controller().scores.entries == ()  # creates the installation ID
+    install_id = (data_dir / "install-id").read_text(encoding="utf-8").strip()
+    table = HighScores()
+    table.add(Entry("Иван", 1200, 13, 1))
+    assert storage.save(table, data_dir / "highscores.json", install_id)
+    assert app.create_controller().scores.entries == (Entry("Иван", 1200, 13, 1),)
 
 
 def test_game_settings_survive_a_restart(data_dir):

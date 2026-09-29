@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,17 @@ def test_run_with_max_frames(data_dir):
 def test_run_the_sound_check(data_dir):
     assert cli.run(["--sound-check", "--max-frames", "3"]) == 0
     assert (data_dir / "sound-check.json").exists()
+
+
+def test_the_game_creates_the_installation_id(data_dir):
+    assert cli.run(["--max-frames", "3"]) == 0
+    text = (data_dir / "install-id").read_text(encoding="utf-8")
+    assert re.fullmatch(r"[0-9a-f]{32}", text.strip())
+
+
+def test_the_sound_check_creates_no_installation_id(data_dir):
+    assert cli.run(["--sound-check", "--max-frames", "3"]) == 0
+    assert not (data_dir / "install-id").exists()
 
 
 @pytest.mark.parametrize("value", ["0", "-5", "abc", "2.5"])
