@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from collections import deque
 from dataclasses import dataclass, replace
 from enum import Enum
 
@@ -20,6 +21,7 @@ _MS_PER_SECOND = 1000
 LOCK_DELAY_MS = 500  # how long a piece may lie on the stack before it locks
 MAX_LOCK_RESETS = 15  # moves or rotations that may restart that time, per piece
 _LOCK_DELAY_UNITS = LOCK_DELAY_MS * _UNITS_PER_MS
+NEXT_COUNT = 3  # how many upcoming pieces the game knows
 
 
 class StepResult(Enum):
@@ -72,7 +74,7 @@ class Game:
 
     def new_game(self, start_level: int = 0) -> None:
         """Start over at start_level: empty board, score and lines at zero, a new bag,
-        fresh active and next pieces, an empty hold slot."""
+        a fresh active piece and queue of next pieces, an empty hold slot."""
         self._randomizer.reset()
         self.board = Board()
         self.is_over = False
@@ -84,10 +86,20 @@ class Game:
         self.pieces_locked = 0
         self._gravity_time = 0  # accumulated time, in 1/60 ms
         self.active = ActivePiece.spawn(self._randomizer.next())
-        self.next_type = self._randomizer.next()
+        self._queue = deque(self._randomizer.next() for _ in range(NEXT_COUNT))
         self.held_type: PieceType | None = None  # the hold slot
         self.can_hold = True  # hold may be used once per piece
         self._reset_lock_delay()
+
+    @property
+    def next_types(self) -> tuple[PieceType, ...]:
+        """The NEXT_COUNT upcoming pieces, in the order they will come in."""
+        return tuple(self._queue)
+
+    @property
+    def next_type(self) -> PieceType:
+        """The piece that comes in next: the first of next_types."""
+        return self._queue[0]
 
     def move_left(self) -> bool:
         """Shift the active piece one column left; return whether it moved."""
@@ -139,7 +151,7 @@ class Game:
         current = self.active.type
         if self.held_type is None:
             self.held_type = current
-            self._spawn(self.next_type)
+            self._spawn_next()
         else:
             self.held_type, incoming = current, self.held_type
             self._bring_in(incoming)
@@ -265,12 +277,14 @@ class Game:
         self.lines += cleared
         self.level = level_for(self.lines, self.start_level)
         self.can_hold = True
-        self._spawn(self.next_type)
+        self._spawn_next()
 
-    def _spawn(self, piece_type: PieceType) -> None:
-        """Bring piece_type in at its spawn position and draw a new next piece."""
-        if self._bring_in(piece_type):
-            self.next_type = self._randomizer.next()
+    def _spawn_next(self) -> None:
+        """Bring in the first piece of the queue and add a new one at its end; on block
+        out the queue stays as it was."""
+        if self._bring_in(self._queue[0]):
+            self._queue.popleft()
+            self._queue.append(self._randomizer.next())
 
     def _bring_in(self, piece_type: PieceType) -> bool:
         """Make piece_type the active piece at its spawn position; False on block out.

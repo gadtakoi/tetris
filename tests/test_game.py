@@ -234,6 +234,57 @@ def test_next_piece_becomes_active():
     assert game.next_type is PieceType.Z
 
 
+# --- Queue of next pieces --------------------------------------------------
+
+
+def test_queue_after_a_lock():
+    game = make_game(PieceType.T, PieceType.S, PieceType.Z, PieceType.O, PieceType.L)
+    assert game.next_types == (PieceType.S, PieceType.Z, PieceType.O)
+    assert game.next_type is PieceType.S
+    drop_to_bottom(game)
+    assert game.active.type is PieceType.S
+    assert game.next_types == (PieceType.Z, PieceType.O, PieceType.L)
+
+
+def test_hold_into_an_empty_slot_takes_the_queue():
+    game = make_game(PieceType.I, PieceType.L, PieceType.J, PieceType.T, PieceType.O)
+    assert game.hold()
+    assert game.active.type is PieceType.L
+    assert game.next_types == (PieceType.J, PieceType.T, PieceType.O)
+
+
+def test_swap_does_not_touch_the_queue():
+    game = make_game(PieceType.I, PieceType.S, PieceType.L, PieceType.J, PieceType.T,
+                     PieceType.O)
+    game.hold()  # I to the slot, S comes in
+    game.hard_drop()  # S locks, L comes in; queue J, T, O
+    queue = game.next_types
+    assert game.hold()
+    assert game.active.type is PieceType.I
+    assert game.next_types == queue
+
+
+def test_first_bag_is_seen_at_once():
+    for seed in range(30):
+        game = Game(seed=seed)
+        dealt = [game.active.type, *game.next_types]
+        assert len(set(dealt)) == 4
+        rest = [game._randomizer.next() for _ in range(3)]
+        assert set(dealt + rest) == set(PieceType)
+
+
+def test_queue_is_reproducible_by_seed():
+    games = [Game(seed=11), Game(seed=11)]
+    assert games[0].next_types == games[1].next_types
+    for _ in range(50):
+        for game in games:
+            game.hard_drop()
+            if game.is_over:
+                game.new_game()
+        assert games[0].next_types == games[1].next_types
+        assert len(games[0].next_types) == 3
+
+
 # --- Line clears and scoring ----------------------------------------------
 
 

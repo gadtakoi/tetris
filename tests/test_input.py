@@ -371,9 +371,9 @@ def test_game_title():
 
 
 def test_cell_rect():
-    assert cell_rect(0, 2) == (20, 20, 30, 30)
-    assert cell_rect(0, 21) == (20, 590, 30, 30)
-    assert cell_rect(9, 21) == (290, 590, 30, 30)
+    assert cell_rect(0, 2) == (330, 60, 30, 30)
+    assert cell_rect(0, 21) == (330, 630, 30, 30)
+    assert cell_rect(9, 21) == (600, 630, 30, 30)
 
 
 def test_hidden_cells_have_no_rect():
@@ -385,8 +385,10 @@ def test_texts_during_play():
     controller = Controller(Game(seed=1))
     controller.game.score, controller.game.lines, controller.game.level = 1200, 13, 1
     assert screen_texts(controller) == [
-        "NEXT", "HOLD", "SCORE", "1200", "LINES", "13", "LEVEL", "1",
-        "MUSIC ON", "MUSIC 50%", "SOUND ON", "SOUND 100%",
+        "Tetris Shmetris", "SCORE", "1200", "LEVEL", "1", "LINES", "13", "BEST", "1200",
+        "MUSIC ON", "MUSIC 50%", "SOUND ON", "SOUND 100%", "NEXT", "HOLD", "CONTROLS",
+        "Left / Right", "Move", "Down", "Soft drop", "Up / X", "Rotate right",
+        "Z / Ctrl", "Rotate left", "Space", "Hard drop", "C / Shift", "Hold", "P / Esc", "Pause",
     ]
 
 
@@ -397,11 +399,48 @@ def test_sound_indicators():
     assert "MUSIC OFF" in texts and "SOUND ON" in texts
 
 
-def test_indicators_sit_below_the_counters():
-    from tetris_ui.layout import panel_texts
-    positions = dict(panel_texts(Controller(Game(seed=1))))
+def test_indicators_sit_in_the_sound_card_below_best():
+    from tetris_ui.layout import BEST_CARD, SOUND_CARD, panel_texts
+    positions = {text: pos for text, pos, _, _ in panel_texts(Controller(Game(seed=1)))}
+    x, y, w, h = SOUND_CARD
+    assert y > BEST_CARD[1] + BEST_CARD[3]
     for text in ("MUSIC ON", "MUSIC 50%", "SOUND ON", "SOUND 100%"):
-        assert positions[text][1] >= 460
+        px, py = positions[text]
+        assert x < px < x + w and y < py < y + h, text
+
+
+def best_value(controller: Controller) -> str:
+    texts = screen_texts(controller)
+    return texts[texts.index("BEST") + 1]
+
+
+@pytest.mark.parametrize(("score", "shown"), [(300, "1200"), (1500, "1500")])
+def test_best_card(score, shown):
+    table = HighScores()
+    table.add(Entry("ANNA", 1200, 13, 1))
+    controller = Controller(Game(seed=1), table)
+    controller.game.score = score
+    assert best_value(controller) == shown
+
+
+def test_best_card_with_an_empty_table():
+    assert best_value(Controller(Game(seed=1))) == "0"
+
+
+def test_controls_card_rows():
+    from tetris_ui.layout import CONTROL_CARD_ROWS, CONTROLS_CARD, panel_texts
+    assert [action for _, action in CONTROL_CARD_ROWS] == [
+        "Move", "Soft drop", "Rotate right", "Rotate left", "Hard drop", "Hold", "Pause",
+    ]
+    assert [keys for keys, _ in CONTROL_CARD_ROWS] == [
+        "Left / Right", "Down", "Up / X", "Z / Ctrl", "Space", "C / Shift", "P / Esc",
+    ]
+    placed = [(text, pos) for text, pos, role, _ in panel_texts(Controller(Game(seed=1)))
+              if role in ("card-key", "card-action")]
+    x, y, w, h = CONTROLS_CARD
+    assert len(placed) == 14
+    for text, (px, py) in placed:
+        assert x < px < x + w and y < py < y + h - 20, text
 
 
 def test_volume_on_the_panel():
@@ -725,7 +764,7 @@ def choose(controller: Controller, item: str) -> None:
 
 def highlighted(controller: Controller) -> list[str]:
     return [text for text, _, role, color in full_screen_texts(controller)
-            if role == "item" and color == HIGHLIGHT]
+            if role in ("item", "setting") and color == HIGHLIGHT]
 
 
 def test_menu_at_launch():
@@ -735,7 +774,7 @@ def test_menu_at_launch():
     texts = screen_texts(controller)
     assert texts == [
         "Tetris Shmetris", "New game", "High scores", "Settings", "Controls", "Guide", "Quit",
-        "Up / Down - choose, Enter - select", "v2.0.0",
+        "Up / Down - choose, Enter - select", "v3.0.0",
     ]
     assert highlighted(controller) == ["New game"]
     assert "SCORE" not in texts and "NEXT" not in texts
@@ -1231,8 +1270,8 @@ def test_key_table_layout():
     entries = full_screen_texts(controller)
     keys = [pos for _, pos, role, _ in entries if role == "key"]
     actions = [pos for _, pos, role, _ in entries if role == "action"]
-    assert keys == [(70, 120 + 32 * row) for row in range(14)]
-    assert actions == [(270, 120 + 32 * row) for row in range(14)]
+    assert keys == [(220, 146 + 30 * row) for row in range(14)]
+    assert actions == [(440, 146 + 30 * row) for row in range(14)]
     assert all(text.isascii() for text, _, _, _ in entries)
 
 
@@ -1254,7 +1293,7 @@ def test_field_and_panel_return_after_help():
     texts = screen_texts(controller)
     assert full_screen(controller) is None
     assert "SCORE" in texts and "NEXT" in texts
-    assert "Tetris Shmetris" not in texts
+    assert "Press F1 or Enter to return" not in texts
 
 
 # --- Hold key --------------------------------------------------------------
@@ -1384,8 +1423,11 @@ def test_names_and_numbers_are_not_translated():
 def test_panel_in_russian():
     controller = Controller(Game(seed=1), settings=ru())
     assert screen_texts(controller) == [
-        "ДАЛЕЕ", "ЗАПАС", "ОЧКИ", "0", "ЛИНИИ", "0", "УРОВЕНЬ", "0",
-        "МУЗЫКА ВКЛ", "МУЗЫКА 50%", "ЗВУК ВКЛ", "ЗВУК 100%",
+        "Tetris Shmetris", "ОЧКИ", "0", "УРОВЕНЬ", "0", "ЛИНИИ", "0", "РЕКОРД", "0",
+        "МУЗЫКА ВКЛ", "МУЗЫКА 50%", "ЗВУК ВКЛ", "ЗВУК 100%", "ДАЛЕЕ", "ЗАПАС", "УПРАВЛЕНИЕ",
+        "Влево / Вправо", "Сдвиг", "Вниз", "Мягкое падение", "Вверх / X", "Поворот вправо",
+        "Z / Ctrl", "Поворот влево", "Пробел", "Жёсткое падение", "C / Shift", "Отложить",
+        "P / Esc", "Пауза",
     ]
 
 
@@ -1469,7 +1511,7 @@ def test_menu_in_russian():
     _, controller = menu_controller(settings=ru())
     assert screen_texts(controller) == [
         "Tetris Shmetris", "Новая игра", "Рекорды", "Настройки", "Управление", "Инструкция",
-        "Выход", "Вверх / Вниз - выбор, Enter - открыть", "v2.0.0",
+        "Выход", "Вверх / Вниз - выбор, Enter - открыть", "v3.0.0",
     ]
 
 
@@ -1762,19 +1804,19 @@ def version_entries(controller: Controller) -> list[tuple]:
 
 def test_version_in_the_main_menu():
     _, controller = menu_controller()
-    assert version_entries(controller) == [("v2.0.0", (510, 630), (130, 130, 140))]
+    assert version_entries(controller) == [("v3.0.0", (944, 708), (255, 197, 158))]
 
 
 def test_version_is_the_same_in_russian():
     _, controller = menu_controller(settings=ru())
-    assert version_entries(controller) == [("v2.0.0", (510, 630), (130, 130, 140))]
+    assert version_entries(controller) == [("v3.0.0", (944, 708), (255, 197, 158))]
 
 
 @pytest.mark.parametrize("item", ["High scores", "Settings", "Controls", "Guide"])
 def test_no_version_on_the_menu_screens(item):
     _, controller = menu_controller()
     choose(controller, item)
-    assert "v2.0.0" not in screen_texts(controller)
+    assert "v3.0.0" not in screen_texts(controller)
 
 
 def test_no_version_in_a_game():
@@ -1787,4 +1829,4 @@ def test_no_version_in_a_game():
     guided.key_down(Key.GUIDE)
     for controller in (playing, paused, helped, guided, Controller(finished_game()),
                        Controller(record_game())):
-        assert "v2.0.0" not in screen_texts(controller)
+        assert "v3.0.0" not in screen_texts(controller)

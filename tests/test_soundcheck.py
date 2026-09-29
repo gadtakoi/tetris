@@ -283,7 +283,7 @@ def test_screen_at_start():
     assert [text for text, _, _ in rows] == [
         f"{number}. {title}" for number, (_, title, _) in enumerate(SPEC_ITEMS, start=1)
     ]
-    assert [color for _, _, color in rows] == [(240, 240, 0)] + [layout.TEXT] * 12
+    assert [color for _, _, color in rows] == [layout.HIGHLIGHT] + [layout.TEXT] * 12
     assert [text for text, _, _ in shown["note"]] == [
         "Piece moved left or right",
         "Volume: effects 100%, music 50%",
@@ -297,7 +297,7 @@ def test_screen_at_start():
 
 def test_rows_go_down_the_screen_from_the_top_left():
     rows = screen(SoundCheck())["row"]
-    assert [pos for _, pos, _ in rows] == [(40, 90 + 30 * i) for i in range(13)]
+    assert [pos for _, pos, _ in rows] == [(200, 120 + 26 * i) for i in range(13)]
 
 
 def test_marked_item_on_the_screen():

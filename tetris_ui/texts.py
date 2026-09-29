@@ -14,6 +14,8 @@ RU: dict[str, str] = {
     "SCORE": "ОЧКИ",
     "LINES": "ЛИНИИ",
     "LEVEL": "УРОВЕНЬ",
+    "BEST": "РЕКОРД",
+    "CONTROLS": "УПРАВЛЕНИЕ",
     "MUSIC ON": "МУЗЫКА ВКЛ",
     "MUSIC OFF": "МУЗЫКА ВЫКЛ",
     "SOUND ON": "ЗВУК ВКЛ",

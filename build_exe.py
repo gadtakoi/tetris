@@ -10,6 +10,7 @@ Usage (from the project's virtual environment):
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,10 @@ DIST_DIR = PROJECT_ROOT / "dist"
 VERSION_FILE = PROJECT_ROOT / "version_info.txt"
 # Left behind by builds made before the game got its own name.
 STALE_EXES = (DIST_DIR / "tetris.exe",)
+# The game's fonts go inside the exe, at the same path relative to the package as in the
+# sources, so tetris_ui.render finds them next to its module in both cases.
+FONT_DIR = PROJECT_ROOT / "tetris_ui" / "fonts"
+FONT_DATA = f"{FONT_DIR}{os.pathsep}tetris_ui/fonts"
 
 PYINSTALLER_ARGS = [
     str(PROJECT_ROOT / "launcher.py"),
@@ -35,6 +40,7 @@ PYINSTALLER_ARGS = [
     "--specpath", str(PROJECT_ROOT),
     "--paths", str(PROJECT_ROOT),
     "--version-file", str(VERSION_FILE),
+    "--add-data", FONT_DATA,
 ]
 
 

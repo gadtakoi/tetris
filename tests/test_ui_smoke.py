@@ -21,6 +21,7 @@ from tetris_ui.settings import Settings  # noqa: E402
 from tetris_ui.soundcheck import ITEMS, MUSIC, CheckKey, SoundCheck  # noqa: E402
 
 VISIBLE_CELLS = [(c, r) for r in range(HIDDEN_ROWS, HEIGHT) for c in range(WIDTH)]
+T_GHOST = [(4, 20), (3, 21), (4, 21), (5, 21)]
 
 
 @pytest.fixture(autouse=True)
@@ -36,9 +37,19 @@ def draw_game(game: Game, controller: Controller | None = None) -> pygame.Surfac
     return surface
 
 
+def pixel(surface: pygame.Surface, point) -> tuple[int, int, int]:
+    return tuple(surface.get_at(point))[:3]
+
+
 def center_color(surface: pygame.Surface, rect) -> tuple[int, int, int]:
     x, y, w, h = rect
-    return tuple(surface.get_at((x + w // 2, y + h // 2)))[:3]
+    return pixel(surface, (x + w // 2, y + h // 2))
+
+
+def colors_in(surface: pygame.Surface, rect) -> set[tuple[int, int, int]]:
+    rect = pygame.Rect(rect)
+    return {pixel(surface, (x, y)) for x in range(rect.left, rect.right)
+            for y in range(rect.top, rect.bottom)}
 
 
 def game_with_hidden_active_piece() -> Game:
@@ -48,126 +59,74 @@ def game_with_hidden_active_piece() -> Game:
     return game
 
 
-def assert_only_ghost_on_field(surface: pygame.Surface, game: Game) -> None:
-    """Every visible cell shows the field background, except the active piece's ghost."""
-    ghost = set(game.ghost_cells())
-    assert ghost  # the hidden piece still casts a shadow onto the floor
+def assert_field_is_empty(surface: pygame.Surface) -> None:
+    """Every visible cell shows the well in its middle (a ghost is only an outline)."""
     for cell in VISIBLE_CELLS:
-        expected = layout.ghost_color(game.active.type) if cell in ghost else layout.FIELD_BG
-        assert center_color(surface, layout.cell_rect(*cell)) == expected
+        assert center_color(surface, layout.cell_rect(*cell)) == layout.WELL, cell
 
 
-# --- Rendering -------------------------------------------------------------
+def fill(piece_type: PieceType) -> tuple[int, int, int]:
+    return layout.PIECE_COLORS[piece_type].fill
+
+
+# --- Rendering: the well -----------------------------------------------------------
 
 
 def test_empty_field():
-    game = game_with_hidden_active_piece()
-    assert_only_ghost_on_field(draw_game(game), game)
+    assert_field_is_empty(draw_game(game_with_hidden_active_piece()))
 
 
 def test_locked_cell_color():
     game = game_with_hidden_active_piece()
     game.board.place([(0, 21)], PieceType.Z)
     surface = draw_game(game)
-    assert tuple(surface.get_at((35, 605)))[:3] == layout.PIECE_COLORS[PieceType.Z]
+    assert pixel(surface, (345, 645)) == (155, 34, 51)
 
 
 def test_hidden_rows_are_not_drawn():
     game = game_with_hidden_active_piece()
     game.board.place([(0, 1)], PieceType.S)
-    assert_only_ghost_on_field(draw_game(game), game)
+    assert_field_is_empty(draw_game(game))
+
+
+def test_grid_dots():
+    surface = draw_game(Game(rng=ScriptedRng([PieceType.T, PieceType.S])))
+    assert pixel(surface, (360, 90)) == (205, 68, 26)
+
+
+def test_hard_shadow_of_a_block():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    game.board.place([(0, 21)], PieceType.Z)
+    surface = draw_game(game)
+    assert pixel(surface, (360, 650)) == (77, 11, 20)
+
+
+def test_shadow_does_not_cover_a_neighbor():
+    game = game_with_hidden_active_piece()
+    game.board.place([(0, 20), (0, 21)], PieceType.J)
+    assert pixel(draw_game(game), (345, 645)) == (110, 50, 28)
 
 
 def test_active_piece_color():
     game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
     surface = draw_game(game)
     for cell in game.active.cells():
-        assert center_color(surface, layout.cell_rect(*cell)) == (160, 0, 240)
-
-
-def preview_colors(surface, x: int, y: int) -> list[list[tuple[int, int, int]]]:
-    """Center colors of the 4 x 2 cells of a preview box."""
-    return [
-        [center_color(surface, (x + c * layout.CELL, y + r * layout.CELL, layout.CELL, layout.CELL))
-         for c in range(layout.PREVIEW_CELLS)]
-        for r in range(layout.PREVIEW_ROWS)
-    ]
-
-
-def test_next_piece_preview():
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.I]))
-    surface = draw_game(game)
-    cyan = layout.PIECE_COLORS[PieceType.I]
-    rows = preview_colors(surface, layout.PREVIEW_X, layout.PREVIEW_Y)
-    assert rows[1] == [cyan] * 4  # I in orientation 0 fills box row 1 only
-    assert cyan not in rows[0]
-
-
-def t_shape(color) -> list[list]:
-    return [[None, color, None, None], [color, color, color, None]]
-
-
-def mask(rows, color) -> list[list]:
-    return [[cell if cell == color else None for cell in row] for row in rows]
-
-
-def test_held_piece_on_the_panel():
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S, PieceType.Z]))
-    game.hold()
-    game.hard_drop()  # hold is allowed again
-    purple = layout.PIECE_COLORS[PieceType.T]
-    rows = preview_colors(draw_game(game), layout.HOLD_X, layout.HOLD_Y)
-    assert mask(rows, purple) == t_shape(purple)
-
-
-def test_held_piece_is_dimmed_while_hold_is_used():
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S, PieceType.Z]))
-    game.hold()
-    assert layout.dimmed_color(PieceType.T) == (80, 0, 120)
-    rows = preview_colors(draw_game(game), layout.HOLD_X, layout.HOLD_Y)
-    assert mask(rows, (80, 0, 120)) == t_shape((80, 0, 120))
-
-
-def test_empty_hold_slot():
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
-    rows = preview_colors(draw_game(game), layout.HOLD_X, layout.HOLD_Y)
-    piece_colors = set(layout.PIECE_COLORS.values())
-    assert not any(color in piece_colors for row in rows for color in row)
-    assert "HOLD" in layout.screen_texts(Controller(game))
-
-
-def test_panel_layout_fits():
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
-    controller = Controller(game)
-    fonts = render.make_fonts()
-    texts = dict(layout.panel_texts(controller))
-    next_box = pygame.Rect(layout.PREVIEW_X, layout.PREVIEW_Y, 4 * layout.CELL, 2 * layout.CELL)
-    hold_box = pygame.Rect(layout.HOLD_X, layout.HOLD_Y, 4 * layout.CELL, 2 * layout.CELL)
-    assert not next_box.colliderect(hold_box)
-    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
-    for text, (x, y) in layout.panel_texts(controller):
-        rect = pygame.Rect((x, y), fonts.small.size(text))
-        assert window.contains(rect), text
-        assert not rect.colliderect(next_box) and not rect.colliderect(hold_box), text
-    for label in ("SCORE", "LINES", "LEVEL"):
-        value_bottom = texts[label][1] + layout.VALUE_OFFSET_Y + fonts.small.get_height()
-        assert value_bottom <= 460
+        if cell[1] >= HIDDEN_ROWS:
+            assert center_color(surface, layout.cell_rect(*cell)) == (255, 158, 176)
 
 
 def test_ghost_of_t_piece():
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
-    surface = draw_game(game)
-    assert layout.ghost_color(PieceType.T) == (20, 0, 30)
-    for cell in [(4, 20), (3, 21), (4, 21), (5, 21)]:
-        assert center_color(surface, layout.cell_rect(*cell)) == (20, 0, 30)
+    surface = draw_game(Game(rng=ScriptedRng([PieceType.T, PieceType.S])))
+    assert pixel(surface, (452, 615)) == (236, 159, 130)
+    assert pixel(surface, (465, 615)) == (217, 73, 29)
+    for cell in T_GHOST:
+        assert center_color(surface, layout.cell_rect(*cell)) == layout.WELL
 
 
 def test_grid_shows_through_the_ghost():
-    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
-    surface = draw_game(game)
-    assert layout.cell_rect(4, 20)[:2] == (140, 560)
-    for pixel in [(140, 575), (155, 560)]:  # left and top edges of ghost cell (4, 20)
-        assert tuple(surface.get_at(pixel))[:3] == layout.GRID
+    surface = draw_game(Game(rng=ScriptedRng([PieceType.T, PieceType.S])))
+    assert layout.cell_rect(4, 20)[:2] == (450, 600)
+    assert pixel(surface, (450, 600)) == (205, 68, 26)
 
 
 def test_piece_on_floor_covers_its_ghost():
@@ -176,14 +135,13 @@ def test_piece_on_floor_covers_its_ghost():
         game.step_down()
     surface = draw_game(game)
     for cell in game.active.cells():
-        assert center_color(surface, layout.cell_rect(*cell)) == (160, 0, 240)
+        assert center_color(surface, layout.cell_rect(*cell)) == (255, 158, 176)
 
 
 def test_ghost_switched_off():
     game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
     surface = draw_game(game, Controller(game, settings=Settings(ghost=False)))
-    for cell in [(4, 20), (3, 21), (4, 21), (5, 21)]:
-        assert center_color(surface, layout.cell_rect(*cell)) == layout.FIELD_BG
+    assert pixel(surface, (452, 615)) == layout.WELL
 
 
 def test_no_ghost_after_game_over():
@@ -191,19 +149,16 @@ def test_no_ghost_after_game_over():
     while not game.is_over:
         game.hard_drop()
     surface = draw_game(game)
-    ghost_colors = {layout.ghost_color(t) for t in PieceType}
-    for cell in VISIBLE_CELLS:
-        assert center_color(surface, layout.cell_rect(*cell)) not in ghost_colors
+    assert layout.GHOST_OUTLINE not in colors_in(surface, layout.WELL_RECT)
 
 
 def test_game_over_hides_active_piece_and_shades_field():
     game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
-    active_cells = game.active.cells()
+    active_cells = [cell for cell in game.active.cells() if cell[1] >= HIDDEN_ROWS]
     game.is_over = True
     surface = draw_game(game)
     for cell in active_cells:
-        color = center_color(surface, layout.cell_rect(*cell))
-        assert color != layout.PIECE_COLORS[PieceType.T]
+        assert center_color(surface, layout.cell_rect(*cell)) != fill(PieceType.T)
 
 
 def test_pause_keeps_board_visible_under_shade():
@@ -212,8 +167,283 @@ def test_pause_keeps_board_visible_under_shade():
     controller = Controller(game)
     controller.key_down(Key.PAUSE)
     surface = draw_game(game, controller)
-    r, g, b = tuple(surface.get_at((35, 605)))[:3]
-    assert r > 0 and (r, g, b) != layout.PIECE_COLORS[PieceType.Z]  # darkened, not hidden
+    color = pixel(surface, (345, 645))
+    assert color not in (fill(PieceType.Z), layout.WELL)  # dimmed, not hidden
+    assert pixel(surface, (270, 130)) == layout.CREAM  # the cards are not shaded
+
+
+# --- Rendering: cards around the well -------------------------------------------------
+
+
+def test_window_background_and_a_card():
+    surface = draw_game(Game(rng=ScriptedRng([PieceType.T, PieceType.S])))
+    assert pixel(surface, (10, 10)) == (232, 86, 42)
+    assert pixel(surface, (270, 130)) == (255, 244, 230)
+    assert pixel(surface, (283, 200)) == (184, 58, 20)
+
+
+def preview_centers(piece_type: PieceType, box) -> list[tuple[int, int]]:
+    half = layout.PREVIEW_CELL // 2
+    return [(x + half, y + half) for x, y in layout.preview_blocks(piece_type, box)]
+
+
+def test_next_piece_preview():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.I, PieceType.S, PieceType.Z]))
+    surface = draw_game(game)
+    centers = preview_centers(PieceType.I, layout.NEXT_BOXES[0])
+    assert len({y for _, y in centers}) == 1  # one horizontal row
+    assert [pixel(surface, c) for c in centers] == [(255, 244, 230)] * 4
+
+
+def test_three_next_pieces():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S, PieceType.Z, PieceType.O]))
+    assert game.next_types == (PieceType.S, PieceType.Z, PieceType.O)
+    surface = draw_game(game)
+    for piece_type, box in zip(game.next_types, layout.NEXT_BOXES):
+        for center in preview_centers(piece_type, box):
+            assert pixel(surface, center) == fill(piece_type), piece_type
+
+
+def test_held_piece_on_the_panel():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S, PieceType.Z]))
+    game.hold()
+    game.hard_drop()  # hold is allowed again
+    surface = draw_game(game)
+    for center in preview_centers(PieceType.T, layout.HOLD_BOX):
+        assert pixel(surface, center) == (255, 158, 176)
+
+
+def test_held_piece_is_dimmed_while_hold_is_used():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S, PieceType.Z]))
+    game.hold()
+    surface = draw_game(game)
+    for center in preview_centers(PieceType.T, layout.HOLD_BOX):
+        assert pixel(surface, center) == (232, 107, 88)
+
+
+def test_empty_hold_slot():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    surface = draw_game(game)
+    radius = layout.BOX_RADIUS
+    inner = pygame.Rect(layout.HOLD_BOX).inflate(-2 * radius, -2 * radius)
+    assert colors_in(surface, inner) == {layout.WELL}
+    assert "HOLD" in layout.screen_texts(Controller(game))
+
+
+def placed_rect(fonts, role: str, text: str, pos) -> pygame.Rect:
+    rect = render.text_rect(fonts, role, text, pos)
+    if role not in layout.KEY_ROLES:
+        size = render.fitted_size(fonts, layout.ROLE_FONTS[role], text,
+                                  layout.screen_text_width(role))
+        assert size >= min(layout.MIN_FONT_SIZE, layout.ROLE_FONTS[role].size), text
+        assert rect.width <= layout.screen_text_width(role), text
+    return rect
+
+
+def extreme_panel(language: str) -> Controller:
+    settings = Settings(language=language, music_on=False, sound_on=False, music_volume=100)
+    controller = Controller(Game(seed=1), settings=settings)
+    controller.game.score = 9_999_999
+    controller.game.lines, controller.game.level = 99_999, 99
+    return controller
+
+
+def card_of(pos) -> tuple:
+    return next((card for card in layout.CARDS if pygame.Rect(card).collidepoint(pos)),
+                (0, 0, 0, 0))
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_panel_texts_fit_their_cards(language):
+    fonts = render.make_fonts()
+    for text, pos, role, _ in layout.panel_texts(extreme_panel(language)):
+        rect = placed_rect(fonts, role, text, pos)
+        if role == "brand":
+            assert rect.left >= layout.LOGO_RECT[0] + layout.LOGO_RECT[2], text
+            assert rect.right <= layout.SCORE_CARD[0] + layout.SCORE_CARD[2], text
+            continue
+        card = pygame.Rect(card_of(pos)).inflate(-2 * layout.CARD_PAD_X, 0)
+        assert card.contains(rect), (text, rect, card)
+        if role == "card-key":
+            assert rect.right <= layout.CONTROL_ACTION_X - 8, text
+
+
+def test_keys_are_drawn_as_keys_with_arrows():
+    fonts = render.make_fonts()
+    height = render.KEY_HEIGHTS["key"]
+    assert render.keys_width(fonts, "key", "Left / Right") == 2 * height + render.KEY_GAP
+    assert render.keys_width(fonts, "key", "C / Shift") > 2 * height
+    surface = draw_game(Game(seed=1))
+    x, y = next(pos for text, pos, role, _ in layout.panel_texts(Controller(Game(seed=1)))
+                if role == "card-key" and text == "Left / Right")
+    cap = render.KEY_HEIGHTS["card-key"]
+    assert layout.INK in colors_in(surface, (x, y, cap, cap))  # the arrow in the first key
+    assert layout.CREAM in colors_in(surface, (x, y, cap, cap))
+
+
+# --- Rendering: fonts -------------------------------------------------------------------
+
+
+def test_fonts_come_with_the_game():
+    fonts = render.make_fonts()
+    assert sorted(path.name for path in render.FONT_DIR.glob("*.ttf")) == sorted(
+        layout.FONT_FILES.values())
+    assert (render.FONT_DIR / "OFL.txt").is_file()
+    assert fonts.for_role("game-title").name == "Unbounded"
+    assert fonts.for_role("paragraph").name == "Onest"
+    for (family, weight), _ in layout.FONT_FILES.items():
+        font = fonts.get(layout.FontSpec(family, weight, 20))
+        assert (font.name, font.style_name) == (family, weight)
+
+
+def glyph(font, char: str):
+    image = font.render(char, True, (255, 255, 255), (0, 0, 0))
+    return image.get_size(), pygame.image.tobytes(image, "RGB")
+
+
+def missing_chars(fonts, entries) -> list[tuple[str, str]]:
+    """(role, char) of every character not in the font of its text's role."""
+    chars_by_role: dict[str, set[str]] = {}
+    for text, role in entries:
+        chars_by_role.setdefault(role, set()).update(set(text) - {" "})
+    missing = []
+    for role, chars in chars_by_role.items():
+        font = fonts.for_role(role)
+        blank = glyph(font, "")  # private use area: not in the font
+        missing += [(role, char) for char in sorted(chars) if glyph(font, char) == blank]
+    return missing
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_every_character_is_in_the_font(language):
+    fonts = render.make_fonts()
+    blank = glyph(fonts.for_role("paragraph"), "")
+    assert glyph(fonts.for_role("paragraph"), "") == blank  # the check sees a gap
+    controller = Controller(Game(seed=1), settings=Settings(language=language))
+    assert missing_chars(fonts, layout.all_screen_entries(controller)) == []
+
+
+def test_fitted_size_stops_at_the_minimum():
+    fonts = render.make_fonts()
+    spec = layout.FontSpec(layout.ONEST, layout.REGULAR, 32)
+    assert render.fitted_size(fonts, spec, "Ш" * 100, 50) == layout.MIN_FONT_SIZE
+
+
+def test_long_title_fits_the_panel():
+    fonts = render.make_fonts()
+    spec = layout.ROLE_FONTS["overlay-title"]
+    assert fonts.get(spec).size("ИГРА ОКОНЧЕНА")[0] > layout.OVERLAY_INNER_W  # must shrink
+    font = render.role_font(fonts, "overlay-title", "ИГРА ОКОНЧЕНА")
+    assert font.size("ИГРА ОКОНЧЕНА")[0] <= layout.OVERLAY_INNER_W == 240
+
+
+def test_english_texts_keep_their_size():
+    fonts = render.make_fonts()
+    spec = layout.ROLE_FONTS["overlay-title"]
+    for text in ("GAME OVER", "PAUSE"):
+        assert render.fitted_size(fonts, spec, text, layout.OVERLAY_INNER_W) == spec.size
+    sound = layout.ROLE_FONTS["sound"]
+    assert render.fitted_size(fonts, sound, "SOUND 100%", layout.screen_text_width("sound")) == 15
+
+
+# --- Rendering: the panel over the well ------------------------------------------------
+
+
+def finished(language: str, record: bool) -> Controller:
+    game = Game(rng=ScriptedRng([PieceType.O]))
+    while not game.is_over:
+        game.hard_drop()
+    table = HighScores()
+    for place in range(9):
+        table.add(Entry("Ш" * 10, 9_999_999 - place, 0, 0))
+    game.score = 340 if record else 0
+    if not record:
+        table.add(Entry("Ш" * 10, 1_000_000, 0, 0))
+    controller = Controller(game, table, settings=Settings(language=language))
+    controller.text_input("Ш" * 10)
+    return controller
+
+
+def overlay_controllers(language: str) -> list[Controller]:
+    paused = Controller(Game(seed=1), settings=Settings(language=language))
+    paused.key_down(Key.PAUSE)
+    return [paused, finished(language, record=True), finished(language, record=False)]
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_overlay_texts_fit_the_panel(language):
+    fonts = render.make_fonts()
+    for controller in overlay_controllers(language):
+        panel, texts = layout.overlay_layout(controller)
+        assert pygame.Rect(layout.WELL_RECT).contains(pygame.Rect(panel))
+        inner = pygame.Rect(panel).inflate(-2 * layout.OVERLAY_PAD_X, 0)
+        rects = []
+        for text, pos, role, _ in texts:
+            rect = placed_rect(fonts, role, text, pos)
+            assert inner.contains(rect), text
+            rects.append(rect)
+        for i, rect in enumerate(rects):
+            assert rect.collidelist(rects[i + 1:]) == -1, texts[i][0]
+        draw_game(controller.game, controller)  # renders without errors
+
+
+def test_full_table_fits_the_well():
+    game = Game(rng=ScriptedRng([PieceType.O]))
+    while not game.is_over:
+        game.hard_drop()
+    table = HighScores()
+    for place in range(10):
+        table.add(Entry("Ш" * 10, 9_999_999 - place, 0, 0))
+    controller = Controller(game, table)
+    assert controller.phase is Phase.TABLE
+    panel, texts = layout.overlay_layout(controller)
+    assert len([t for t in texts if t[2] == "table-row"]) == 10
+    assert pygame.Rect(layout.WELL_RECT).contains(pygame.Rect(panel))
+
+
+def button_color(surface, role: str, pos) -> tuple[int, int, int]:
+    """The color just inside the left end of the button a selected item would have."""
+    x, y, w, h = layout.selection_rect(role, pos)
+    return pixel(surface, (x + 3, y + h // 2))
+
+
+def test_pause_selection_is_a_dark_button():
+    game = Game(rng=ScriptedRng([PieceType.T, PieceType.S]))
+    controller = Controller(game)
+    controller.key_down(Key.PAUSE)
+    controller.key_down(Key.DOWN)
+    surface = draw_game(game, controller)
+    _, texts = layout.overlay_layout(controller)
+    items = {text: pos for text, pos, role, _ in texts if role == "pause-item"}
+    assert button_color(surface, "pause-item", items["Main menu"]) == layout.INK
+    assert button_color(surface, "pause-item", items["Continue"]) == layout.CREAM
+
+
+def test_new_record_row_on_a_peach_plaque():
+    table = HighScores()
+    table.add(Entry("ANNA", 1200, 13, 1))
+    game = Game(rng=ScriptedRng([PieceType.O]))
+    while not game.is_over:
+        game.hard_drop()
+    game.score = 340
+    controller = Controller(game, table)
+    controller.text_input("Ann")
+    controller.key_down(Key.RESTART)
+    surface = draw_game(game, controller)
+    _, texts = layout.overlay_layout(controller)
+    rows = {text: pos for text, pos, role, _ in texts if role == "table-row"}
+    x, y = rows["2. Ann 340"]
+    assert pixel(surface, (x - 4, y + 10)) == layout.PEACH
+    x, y = rows["1. ANNA 1200"]
+    assert pixel(surface, (x - 4, y + 10)) == layout.CREAM
+
+
+def test_new_record_badge():
+    controller = finished("en", record=True)
+    surface = draw_game(controller.game, controller)
+    _, texts = layout.overlay_layout(controller)
+    ((x, y),) = [pos for _, pos, role, _ in texts if role == "badge"]
+    assert pixel(surface, (x - 4, y + 10)) == layout.PEACH
 
 
 # --- Window and events -----------------------------------------------------
@@ -221,7 +451,7 @@ def test_pause_keeps_board_visible_under_shade():
 
 def test_window_size_and_title():
     screen = app.create_window()
-    assert screen.get_size() == (520, 640)
+    assert screen.get_size() == (960, 720)
     assert pygame.display.get_caption()[0] == "Tetris Shmetris"
 
 
@@ -305,9 +535,14 @@ def test_text_input_event_reaches_name():
     assert controller.name == "Ива"
 
 
-def test_longest_table_row_fits_the_field():
-    width = render.make_fonts().table.size("10. ШШШШШШШШШШ 9999999")[0]
-    assert width < layout.FIELD_W
+def test_longest_table_row_fits_the_panel():
+    fonts = render.make_fonts()
+    text = "10. ШШШШШШШШШШ 9999999"
+    size = render.fitted_size(fonts, layout.ROLE_FONTS["table-row"], text,
+                              layout.screen_text_width("table-row"))
+    assert size >= layout.MIN_FONT_SIZE
+    assert render.role_font(fonts, "table-row", text).size(text)[0] <= layout.screen_text_width(
+        "table-row")
 
 
 def test_game_over_table_renders():
@@ -347,7 +582,6 @@ def test_settings_change_is_saved(data_dir):
     assert saved["sound_on"] is False
     assert app.create_controller().sound_on is False  # the next launch picks it up
 
-
 # --- Menu, its screens and the help screen ---------------------------------
 
 
@@ -383,30 +617,38 @@ def controller_on(screen: str, language: str = "en") -> Controller:
 def test_menu_covers_the_field():
     controller = controller_on("menu")
     surface = draw_game(controller.game, controller)
-    assert center_color(surface, layout.cell_rect(4, 21)) == layout.WINDOW_BG
-    assert center_color(surface, layout.cell_rect(4, 2)) != layout.PIECE_COLORS[PieceType.T]
+    assert center_color(surface, layout.cell_rect(4, 19)) == layout.CREAM  # the panel
+    assert center_color(surface, layout.cell_rect(4, 2)) != fill(PieceType.T)
+
+
+def test_main_menu_panel():
+    controller = controller_on("menu")
+    surface = draw_game(controller.game, controller)
+    assert pixel(surface, (480, 60)) == (255, 244, 230)
+    assert pixel(surface, (100, 360)) == (232, 86, 42)
+    fonts = render.make_fonts()
+    (hint,) = [placed_rect(fonts, role, t, p)
+               for t, p, role, _ in layout.full_screen_texts(controller) if role == "hint"]
+    assert hint.top > 648
+
+
+UNDER_PANEL = ("hint", "version")
 
 
 @pytest.mark.parametrize("language", ["en", "ru"])
 @pytest.mark.parametrize("screen", ["menu", "scores", "settings", "controls", "help"])
-def test_full_screen_texts_fit_the_window(screen, language):
+def test_full_screen_texts_fit_the_panel(screen, language):
     controller = controller_on(screen, language)
     fonts = render.make_fonts()
     window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    panel = pygame.Rect(layout.SCREEN_PANEL)
     rects = []
     for text, pos, role, _ in layout.full_screen_texts(controller):
-        width = layout.screen_text_width(role)
-        size = render.fitted_size(fonts, render.screen_font_size(role), text, width)
-        assert size >= layout.MIN_FONT_SIZE, text
-        rect = pygame.Rect((0, 0), fonts.sized(size).size(text))
-        assert rect.width <= width, text
-        if role in ("key", "action"):
-            rect.topleft = pos
-        elif role == "version":
-            rect.bottomright = pos
+        rect = placed_rect(fonts, role, text, pos)
+        if role in UNDER_PANEL:
+            assert window.contains(rect) and rect.top >= panel.bottom + layout.PANEL_LIFT, text
         else:
-            rect.center = pos
-        assert window.contains(rect), text
+            assert panel.contains(rect), text
         if role == "key":  # the key column ends before the action column starts
             assert rect.right < layout.ACTION_COLUMN_X, text
         rects.append(rect)
@@ -415,28 +657,44 @@ def test_full_screen_texts_fit_the_window(screen, language):
     draw_game(controller.game, controller)  # renders without errors
 
 
-def test_settings_values_fit_the_window():
+def test_settings_values_fit_the_button():
     settings = Settings(language="ru", music_on=False, music_volume=100, start_level=19,
                         autorepeat="normal")
     fonts = render.make_fonts()
     for row in menus.SETTING_ROWS:
-        assert fonts.small.size(menus.setting_line(settings, row))[0] < layout.WINDOW_SIZE[0]
+        text = menus.setting_line(settings, row)
+        placed_rect(fonts, "setting", text, (layout.CENTER_X, layout.SETTINGS_ROWS_Y))
 
 
-def test_selected_menu_item_is_highlighted():
+def test_selected_menu_item_is_a_dark_button():
     controller = controller_on("menu")
-    controller.key_down(Key.DOWN)
     surface = draw_game(controller.game, controller)
-    colors = {tuple(surface.get_at((x, y)))[:3]
-              for x in range(160, 360) for y in range(layout.MENU_ITEMS_Y + 40,
-                                                        layout.MENU_ITEMS_Y + 60)}
-    assert layout.HIGHLIGHT in colors  # "High scores", the second item
-
-
-def test_key_columns_do_not_overlap():
+    items = {text: pos for text, pos, role, _ in layout.full_screen_texts(controller)
+             if role == "item"}
+    assert button_color(surface, "item", items["New game"]) == layout.INK
+    assert button_color(surface, "item", items["Quit"]) == layout.CREAM
     fonts = render.make_fonts()
-    widest_key = max(fonts.small.size(keys)[0] for keys, _ in layout.HOTKEYS)
-    assert layout.KEY_COLUMN_X + widest_key < layout.ACTION_COLUMN_X
+    assert layout.CREAM in colors_in(surface, placed_rect(fonts, "item", "New game",
+                                                          items["New game"]))
+    assert layout.INK in colors_in(surface, placed_rect(fonts, "item", "Quit", items["Quit"]))
+
+
+def test_selected_setting_is_a_dark_button():
+    controller = controller_on("settings")
+    surface = draw_game(controller.game, controller)
+    rows = [(text, pos) for text, pos, role, _ in layout.full_screen_texts(controller)
+            if role == "setting"]
+    assert button_color(surface, "setting", rows[0][1]) == layout.INK
+    assert button_color(surface, "setting", rows[1][1]) == layout.CREAM
+
+
+def test_key_list_draws_keys():
+    controller = controller_on("controls")
+    surface = draw_game(controller.game, controller)
+    x, y = next(pos for text, pos, role, _ in layout.full_screen_texts(controller)
+                if role == "key" and text == "Left / Right")
+    first_key = (x, y, layout.KEY_H, layout.KEY_H)
+    assert {layout.INK, layout.CREAM} <= colors_in(surface, first_key)
 
 
 def test_pause_menu_renders():
@@ -506,84 +764,7 @@ def test_effects_volume_is_saved(data_dir):
     assert app.create_controller().settings.sfx_volume == 90
 
 
-def test_sound_indicators_fit_the_window():
-    controller = Controller(Game(seed=1), settings=Settings(music_on=False, sound_on=False,
-                                                           music_volume=100, sfx_volume=100))
-    fonts = render.make_fonts()
-    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
-    for text, (x, y) in layout.panel_texts(controller):
-        assert window.contains(pygame.Rect((x, y), fonts.small.size(text))), text
-
-
 # --- Russian interface -----------------------------------------------------
-
-
-def fitted_rect(fonts, base_size: int, text: str, width: int) -> pygame.Rect:
-    size = render.fitted_size(fonts, base_size, text, width)
-    assert size >= layout.MIN_FONT_SIZE, text
-    return pygame.Rect((0, 0), fonts.sized(size).size(text))
-
-
-def test_long_title_fits_the_field():
-    fonts = render.make_fonts()
-    assert fonts.big.size("ИГРА ОКОНЧЕНА")[0] > layout.FIELD_W  # needs a smaller size
-    rect = fitted_rect(fonts, render.BIG_FONT_SIZE, "ИГРА ОКОНЧЕНА", layout.FIELD_W)
-    assert rect.width <= layout.FIELD_W
-
-
-def test_english_texts_keep_their_size():
-    fonts = render.make_fonts()
-    for text in ("GAME OVER", "PAUSE", "HIGH SCORES"):
-        assert render.fitted_size(fonts, render.BIG_FONT_SIZE, text, layout.FIELD_W) == 56
-    assert render.fitted_size(fonts, 32, "SOUND 100%", layout.PANEL_W) == 32
-
-
-def test_fitted_size_stops_at_the_minimum():
-    fonts = render.make_fonts()
-    assert render.fitted_size(fonts, 32, "Ш" * 100, 50) == layout.MIN_FONT_SIZE
-
-
-def finished(language: str, record: bool) -> Controller:
-    game = Game(rng=ScriptedRng([PieceType.O]))
-    while not game.is_over:
-        game.hard_drop()
-    table = HighScores()
-    for place in range(9):
-        table.add(Entry("Ш" * 10, 9_999_999 - place, 0, 0))
-    game.score = 340 if record else 0
-    if not record:
-        table.add(Entry("Ш" * 10, 1_000_000, 0, 0))
-    controller = Controller(game, table, settings=Settings(language=language))
-    controller.text_input("Ш" * 10)
-    return controller
-
-
-def overlay_controllers(language: str) -> list[Controller]:
-    paused = Controller(Game(seed=1), settings=Settings(language=language))
-    paused.key_down(Key.PAUSE)
-    return [paused, finished(language, record=True), finished(language, record=False)]
-
-
-@pytest.mark.parametrize("language", ["en", "ru"])
-def test_overlay_and_panel_texts_fit(language):
-    fonts = render.make_fonts()
-    for controller in overlay_controllers(language):
-        lines = layout.overlay_lines(controller)
-        assert lines
-        (title, _), rest = lines[0], lines[1:]
-        assert fitted_rect(fonts, render.BIG_FONT_SIZE, title, layout.FIELD_W).width <= layout.FIELD_W
-        for text, _ in rest:
-            rect = fitted_rect(fonts, render.TABLE_FONT_SIZE, text, layout.FIELD_W)
-            assert rect.width <= layout.FIELD_W, text
-        draw_game(controller.game, controller)  # renders without errors
-    settings = Settings(language=language, music_on=False, sound_on=False, music_volume=100)
-    panel = Controller(Game(seed=1), settings=settings)
-    panel.game.score = 9_999_999
-    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
-    for text, (x, y) in layout.panel_texts(panel):
-        rect = fitted_rect(fonts, render.SMALL_FONT_SIZE, text, layout.PANEL_W)
-        rect.topleft = (x, y)
-        assert rect.width <= layout.PANEL_W and window.contains(rect), text
 
 
 def test_russian_screens_render():
@@ -599,13 +780,14 @@ def test_language_survives_a_restart(data_dir):
     again = app.create_controller()
     assert layout.screen_texts(again)[:2] == ["Tetris Shmetris", "Новая игра"]
     screen = app.create_window()
-    assert screen.get_size() == (520, 640)
+    assert screen.get_size() == (960, 720)
     assert pygame.display.get_caption()[0] == "Tetris Shmetris"
 
 
 # --- Guide (F2) ---------------------------------------------------------------
 
 GUIDE_LANGUAGES = ("en", "ru")
+GUIDE_WIDTH = 560
 
 
 def guide_controller(language: str, page: int) -> Controller:
@@ -619,32 +801,20 @@ def guide_controller(language: str, page: int) -> Controller:
     return controller
 
 
-def centered_rect(fonts, role: str, text: str, pos) -> pygame.Rect:
-    base = render.screen_font_size(role)
-    rect = fitted_rect(fonts, base, text, layout.screen_text_width(role))
-    rect.center = pos
-    return rect
-
-
-def glyph(font, char: str):
-    image = font.render(char, True, (255, 255, 255), (0, 0, 0))
-    return image.get_size(), pygame.image.tobytes(image, "RGB")
-
-
 def test_wrap_text_by_words():
-    font = render.make_fonts().sized(render.GUIDE_FONT_SIZE)
+    font = render.make_fonts().for_role("paragraph")
     paragraph = guide.paragraphs(0, "ru")[1]
-    assert font.size(paragraph)[0] > 480
-    lines = render.wrap_text(font, paragraph, 480)
+    assert font.size(paragraph)[0] > GUIDE_WIDTH
+    lines = render.wrap_text(font, paragraph, GUIDE_WIDTH)
     assert len(lines) > 1
-    assert all(font.size(line)[0] <= 480 for line in lines)
+    assert all(font.size(line)[0] <= GUIDE_WIDTH for line in lines)
     assert " ".join(lines) == paragraph
 
 
 def test_long_word_gets_a_line_of_its_own():
-    font = render.make_fonts().sized(render.GUIDE_FONT_SIZE)
+    font = render.make_fonts().for_role("paragraph")
     word = "Ш" * 60
-    assert render.wrap_text(font, f"a {word} b", 480) == ["a", word, "b"]
+    assert render.wrap_text(font, f"a {word} b", GUIDE_WIDTH) == ["a", word, "b"]
 
 
 @pytest.mark.parametrize("language", GUIDE_LANGUAGES)
@@ -653,19 +823,19 @@ def test_guide_page_fits(language, page):
     controller = guide_controller(language, page)
     fonts = render.make_fonts()
     window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    panel = pygame.Rect(layout.SCREEN_PANEL)
     texts = layout.full_screen_texts(controller)
-    title, number, hint = (centered_rect(fonts, role, text, pos)
+    title, number, hint = (placed_rect(fonts, role, text, pos)
                            for text, pos, role, _ in texts if role != "paragraph")
-    for rect in (title, number, hint):
-        assert window.contains(rect)
-    assert number.bottom <= hint.top
+    assert panel.contains(title) and panel.contains(number)
+    assert window.contains(hint) and hint.top >= panel.bottom
     paragraphs = [text for text, _, role, _ in texts if role == "paragraph"]
     origin = next(pos for _, pos, role, _ in texts if role == "paragraph")
-    font = fonts.sized(render.GUIDE_FONT_SIZE)
+    font = fonts.for_role("paragraph")
     bottom = title.bottom
     for line, pos in render.guide_lines(fonts, paragraphs, origin):
         rect = pygame.Rect(pos, font.size(line))
-        assert rect.left == 20 and rect.width <= 480, line
+        assert rect.left == 200 and rect.width <= GUIDE_WIDTH, line
         assert rect.top >= bottom, line  # below the title and the line before it
         bottom = rect.bottom
     assert bottom <= number.top  # the last line is above the page number
@@ -676,19 +846,9 @@ def test_guide_pages_render(language):
     for page in range(guide.PAGE_COUNT):
         controller = guide_controller(language, page)
         surface = draw_game(controller.game, controller)
-        # Neither the field border (x = 18) nor its top-left cell is drawn; no text is there.
-        assert tuple(surface.get_at((18, 300)))[:3] == layout.WINDOW_BG
-        assert tuple(surface.get_at((35, 35)))[:3] == layout.WINDOW_BG
-
-
-@pytest.mark.parametrize("language", GUIDE_LANGUAGES)
-def test_every_character_is_in_the_font(language):
-    font = render.make_fonts().sized(render.GUIDE_FONT_SIZE)
-    missing = glyph(font, "")  # private use area: not in the font
-    assert glyph(font, "←") == missing  # the check does see a missing glyph
-    controller = Controller(Game(seed=1), settings=Settings(language=language))
-    chars = set("".join(layout.all_screen_texts(controller))) - {" "}
-    assert [char for char in sorted(chars) if glyph(font, char) == missing] == []
+        # Neither the well nor the cards are drawn: the window shows the guide's panel.
+        assert pixel(surface, (100, 300)) == layout.WINDOW_BG
+        assert pixel(surface, (345, 600)) == layout.CREAM
 
 
 # --- Game version in the main menu ---------------------------------------------
@@ -699,19 +859,14 @@ def test_version_label_in_the_menu():
     fonts = render.make_fonts()
     texts = layout.full_screen_texts(controller)
     ((text, pos, _, _),) = [entry for entry in texts if entry[2] == "version"]
-    rect = fitted_rect(fonts, render.screen_font_size("version"), text,
-                       layout.screen_text_width("version"))
-    rect.bottomright = pos
+    rect = placed_rect(fonts, "version", text, pos)
     assert pygame.Rect((0, 0), layout.WINDOW_SIZE).contains(rect)
-    assert rect.left > 260
-    hint = next(centered_rect(fonts, role, t, p) for t, p, role, _ in texts if role == "hint")
-    assert rect.top >= hint.bottom  # below the hint
-    items = [centered_rect(fonts, role, t, p) for t, p, role, _ in texts if role == "item"]
-    assert rect.collidelist(items) == -1
+    assert rect.right <= 944 and rect.bottom <= 708
+    assert rect.left > 808 and rect.top > 648  # clear of the panel and its shadow
+    hint = next(placed_rect(fonts, role, t, p) for t, p, role, _ in texts if role == "hint")
+    assert not rect.colliderect(hint)
     surface = draw_game(controller.game, controller)
-    colors = {tuple(surface.get_at((x, y)))[:3]
-              for x in range(rect.left, rect.right) for y in range(rect.top, rect.bottom)}
-    assert layout.VERSION_COLOR in colors  # drawn, in its muted color
+    assert (255, 197, 158) in colors_in(surface, rect)
 
 
 # --- Sound check screen --------------------------------------------------------
@@ -729,29 +884,20 @@ def check_with(index: int, marked: bool = False) -> SoundCheck:
 
 def check_rects(fonts, check: SoundCheck, language: str, has_audio: bool):
     """(text, role, rect) of every sound check text at its fitted size and place."""
-    placed = []
-    for text, pos, role, _ in layout.sound_check_texts(check, language, has_audio):
-        rect = fitted_rect(fonts, render.screen_font_size(role), text,
-                           layout.screen_text_width(role))
-        if role in layout.TOP_LEFT_ROLES:
-            rect.topleft = pos
-        else:
-            rect.center = pos
-        placed.append((text, role, rect))
-    return placed
+    return [(text, role, placed_rect(fonts, role, text, pos))
+            for text, pos, role, _ in layout.sound_check_texts(check, language, has_audio)]
 
 
 @pytest.mark.parametrize("has_audio", [True, False])
 @pytest.mark.parametrize("language", ["en", "ru"])
-def test_sound_check_texts_fit_the_window(language, has_audio):
+def test_sound_check_texts_fit_the_panel(language, has_audio):
     fonts = render.make_fonts()
-    window = pygame.Rect((0, 0), layout.WINDOW_SIZE)
+    panel = pygame.Rect(layout.SCREEN_PANEL)
     for index in range(len(ITEMS)):
         placed = check_rects(fonts, check_with(index, marked=True), language, has_audio)
         rects = [rect for _, _, rect in placed]
         for text, role, rect in placed:
-            assert window.contains(rect), text
-            assert rect.width <= layout.screen_text_width(role), text
+            assert panel.contains(rect), text
             if role == "row":  # rows end before the column of marks starts
                 assert rect.right < layout.CHECK_MARK_X, text
         for i, rect in enumerate(rects):  # lines do not run into each other
@@ -762,37 +908,30 @@ def test_sound_check_texts_fit_the_window(language, has_audio):
 def test_sound_check_texts_keep_their_size(language):
     fonts = render.make_fonts()
     for text, pos, role, _ in layout.sound_check_texts(check_with(8, True), language, True):
-        size = render.fitted_size(fonts, render.screen_font_size(role), text,
-                                  layout.screen_text_width(role))
-        assert size == render.screen_font_size(role), text  # nothing had to shrink
+        spec = layout.ROLE_FONTS[role]
+        size = render.fitted_size(fonts, spec, text, layout.screen_text_width(role))
+        assert size == spec.size, text  # nothing had to shrink
 
 
 @pytest.mark.parametrize("language", ["en", "ru"])
 def test_every_sound_check_character_is_in_the_font(language):
     fonts = render.make_fonts()
-    chars: set[str] = set()
+    entries = []
     for index in range(len(ITEMS)):
         for has_audio in (True, False):
             texts = layout.sound_check_texts(check_with(index, True), language, has_audio)
-            chars |= set("".join(text for text, _, _, _ in texts))
-    for size in {render.CHECK_FONT_SIZE, render.SMALL_FONT_SIZE, render.BIG_FONT_SIZE}:
-        font = fonts.sized(size)
-        missing = glyph(font, "")  # private use area: not in the font
-        assert glyph(font, "←") == missing  # the check does see a missing glyph
-        assert [char for char in sorted(chars - {" "}) if glyph(font, char) == missing] == []
+            entries += [(text, role) for text, _, role, _ in texts]
+    assert missing_chars(fonts, entries) == []
 
 
-def test_selected_sound_check_row_is_highlighted():
+def test_selected_sound_check_row_is_a_dark_button():
     check = check_with(4)  # item 5
     surface = pygame.Surface(layout.WINDOW_SIZE)
     render.draw_sound_check(surface, check, "en", True, render.make_fonts())
-    placed = check_rects(render.make_fonts(), check, "en", True)
-    rows = [rect for _, role, rect in placed if role == "row"]
-    for i, rect in enumerate(rows):
-        colors = {tuple(surface.get_at((x, y)))[:3]
-                  for x in range(rect.left, rect.right) for y in range(rect.top, rect.bottom)}
-        assert (layout.HIGHLIGHT in colors) == (i == 4), i
-    assert layout.HIGHLIGHT == (240, 240, 0)  # the color of a selected menu item
+    rows = [pos for _, pos, role, _ in layout.sound_check_texts(check, "en", True)
+            if role == "row"]
+    for i, pos in enumerate(rows):
+        assert (button_color(surface, "row", pos) == layout.INK) == (i == 4), i
 
 
 @pytest.mark.parametrize("language", ["en", "ru"])
@@ -802,10 +941,8 @@ def test_sound_check_screen_renders(language):
     render.draw_sound_check(surface, check, language, False, render.make_fonts())
     mark = next(rect for _, role, rect in check_rects(render.make_fonts(), check, language, False)
                 if role == "mark")
-    colors = {tuple(surface.get_at((x, y)))[:3]
-              for x in range(mark.left, mark.right) for y in range(mark.top, mark.bottom)}
-    assert layout.MARK_COLOR in colors
-    assert tuple(surface.get_at((5, 5)))[:3] == layout.WINDOW_BG
+    assert layout.MARK_COLOR in colors_in(surface, mark)
+    assert pixel(surface, (5, 5)) == layout.WINDOW_BG
 
 
 # --- Sound check mode ----------------------------------------------------------

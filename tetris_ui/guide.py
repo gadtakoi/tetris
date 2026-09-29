@@ -40,7 +40,8 @@ _PARAGRAPHS: dict[str, tuple[tuple[str, ...], ...]] = {
             "Pieces of four squares fall from the top. Move and rotate them to fill whole "
             "rows: a full row disappears and everything above it moves down. The game ends "
             "when a new piece has no room to appear.",
-            "On the panel, NEXT shows the next piece and HOLD the piece put aside.",
+            "NEXT shows the next three pieces, top one first, and HOLD the piece put aside. "
+            "BEST is the top score of the table, or this game's score once it is higher.",
             "Rows cleared by one piece score 40 for 1 row, 100 for 2, 300 for 3 and 1200 "
             "for 4, multiplied by (level + 1). Dropping pieces scores nothing.",
             "The level goes up by 1 every 10 rows and is never lower than the start level "
@@ -104,7 +105,8 @@ _PARAGRAPHS: dict[str, tuple[tuple[str, ...], ...]] = {
             "Сверху падают фигуры из четырёх квадратов. Сдвигайте и поворачивайте их, "
             "чтобы собирать сплошные ряды: заполненный ряд исчезает, а всё, что выше, "
             "опускается. Игра заканчивается, когда новой фигуре негде появиться.",
-            "На панели ДАЛЕЕ показывает следующую фигуру, а ЗАПАС — отложенную.",
+            "ДАЛЕЕ показывает три следующие фигуры, верхняя придёт первой, а ЗАПАС — "
+            "отложенную. РЕКОРД — лучший результат таблицы или очки партии, если они больше.",
             "За ряды, убранные одной фигурой, дают 40 очков за 1 ряд, 100 за 2, 300 за 3 "
             "и 1200 за 4, умноженные на (уровень + 1). За падение фигур очков нет.",
             "Уровень растёт на 1 за каждые 10 рядов и не бывает ниже начального уровня "

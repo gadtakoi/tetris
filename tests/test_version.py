@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 import subprocess
@@ -18,7 +19,7 @@ def test_version_is_major_minor_patch():
 
 
 def test_current_version():
-    assert __version__ == "2.0.0"
+    assert __version__ == "3.0.0"
 
 
 def test_package_import_does_not_load_pygame():
@@ -86,6 +87,14 @@ def test_build_passes_the_version_file():
     args = build_exe.PYINSTALLER_ARGS
     assert args[args.index("--version-file") + 1] == str(build_exe.VERSION_FILE)
     assert build_exe.VERSION_FILE == PROJECT_ROOT / "version_info.txt"
+
+
+def test_build_puts_the_fonts_inside_the_exe():
+    args = build_exe.PYINSTALLER_ARGS
+    source, target = args[args.index("--add-data") + 1].split(os.pathsep)
+    assert Path(source) == PROJECT_ROOT / "tetris_ui" / "fonts"
+    assert target == "tetris_ui/fonts"
+    assert (Path(source) / "OFL.txt").is_file()
 
 
 def test_committed_version_file_is_up_to_date():

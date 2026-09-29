@@ -52,14 +52,15 @@ def test_no_long_droughts_or_floods(seed):
 
 
 def game_sequence(game: Game, count: int) -> list[PieceType]:
-    """The pieces a game deals: its active and next piece, then the following ones."""
-    return [game.active.type, game.next_type] + [game._randomizer.next() for _ in range(count - 2)]
+    """The pieces a game deals: its active piece and queue, then the following ones."""
+    dealt = [game.active.type, *game.next_types]
+    return dealt + [game._randomizer.next() for _ in range(count - len(dealt))]
 
 
 def test_new_game_starts_a_new_bag():
     for seed in range(20):
         game = Game(seed=seed)
-        game._randomizer.next()  # three pieces dealt: active, next and one more
+        game._randomizer.next()  # five pieces dealt: active, queue and one more
         game.new_game()
         assert set(game_sequence(game, 7)) == set(PieceType)
 
