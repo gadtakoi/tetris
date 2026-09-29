@@ -18,7 +18,7 @@ def test_version_is_major_minor_patch():
 
 
 def test_current_version():
-    assert __version__ == "1.0.0"
+    assert __version__ == "2.0.0"
 
 
 def test_package_import_does_not_load_pygame():

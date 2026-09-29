@@ -55,7 +55,7 @@
 
 | Экран | Заголовок | Строки | Подсказка |
 |---|---|---|---|
-| Главное меню | «Tetris Shmetris» (`layout.TITLE` из `tetris_ui.GAME_TITLE`) крупным шрифтом, y = 120 | New game, High scores, Settings, Controls, Guide, Quit с y = 240, шаг 50 | «Up / Down - choose, Enter - select», y = 590; в правом нижнем углу (угол надписи — точка (510, 630)) версия «v1.0.0» шрифтом 20 px цветом (130, 130, 140) — `layout.VERSION_TEXT` из `tetris_ui.__version__`, одинаковая на обоих языках |
+| Главное меню | «Tetris Shmetris» (`layout.TITLE` из `tetris_ui.GAME_TITLE`) крупным шрифтом, y = 120 | New game, High scores, Settings, Controls, Guide, Quit с y = 240, шаг 50 | «Up / Down - choose, Enter - select», y = 590; в правом нижнем углу (угол надписи — точка (510, 630)) версия «v2.0.0» шрифтом 20 px цветом (130, 130, 140) — `layout.VERSION_TEXT` из `tetris_ui.__version__`, одинаковая на обоих языках |
 | High scores | «HIGH SCORES», y = 60 | «<место>. <имя> <очки>» или «No records yet» с y = 130, шаг 34 | «Press Enter or Esc to return», y = 590 |
 | Settings | «Settings», y = 60 | «<название>: <значение>» и «Back» с y = 130, шаг 45 | «Left / Right - change, Esc - back», y = 590 |
 | Controls и экран клавиш по F1 | «Tetris Shmetris», y = 60 | 14 строк `layout.HOTKEYS` с y = 120, шаг 32; клавиши при x = 70 (жёлтым), действия при x = 270 | «Press Enter or Esc to return» или «Press F1 or Enter to return», y = 600 |

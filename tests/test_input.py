@@ -735,7 +735,7 @@ def test_menu_at_launch():
     texts = screen_texts(controller)
     assert texts == [
         "Tetris Shmetris", "New game", "High scores", "Settings", "Controls", "Guide", "Quit",
-        "Up / Down - choose, Enter - select", "v1.0.0",
+        "Up / Down - choose, Enter - select", "v2.0.0",
     ]
     assert highlighted(controller) == ["New game"]
     assert "SCORE" not in texts and "NEXT" not in texts
@@ -1469,7 +1469,7 @@ def test_menu_in_russian():
     _, controller = menu_controller(settings=ru())
     assert screen_texts(controller) == [
         "Tetris Shmetris", "Новая игра", "Рекорды", "Настройки", "Управление", "Инструкция",
-        "Выход", "Вверх / Вниз - выбор, Enter - открыть", "v1.0.0",
+        "Выход", "Вверх / Вниз - выбор, Enter - открыть", "v2.0.0",
     ]
 
 
@@ -1762,19 +1762,19 @@ def version_entries(controller: Controller) -> list[tuple]:
 
 def test_version_in_the_main_menu():
     _, controller = menu_controller()
-    assert version_entries(controller) == [("v1.0.0", (510, 630), (130, 130, 140))]
+    assert version_entries(controller) == [("v2.0.0", (510, 630), (130, 130, 140))]
 
 
 def test_version_is_the_same_in_russian():
     _, controller = menu_controller(settings=ru())
-    assert version_entries(controller) == [("v1.0.0", (510, 630), (130, 130, 140))]
+    assert version_entries(controller) == [("v2.0.0", (510, 630), (130, 130, 140))]
 
 
 @pytest.mark.parametrize("item", ["High scores", "Settings", "Controls", "Guide"])
 def test_no_version_on_the_menu_screens(item):
     _, controller = menu_controller()
     choose(controller, item)
-    assert "v1.0.0" not in screen_texts(controller)
+    assert "v2.0.0" not in screen_texts(controller)
 
 
 def test_no_version_in_a_game():
@@ -1787,4 +1787,4 @@ def test_no_version_in_a_game():
     guided.key_down(Key.GUIDE)
     for controller in (playing, paused, helped, guided, Controller(finished_game()),
                        Controller(record_game())):
-        assert "v1.0.0" not in screen_texts(controller)
+        assert "v2.0.0" not in screen_texts(controller)
